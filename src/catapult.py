@@ -26,6 +26,7 @@ class TCatapult(object):
   @constant POS_MAX The maximum position.
   @constant POS_MID The middle position.
   @constant POS_INIT The initial position.
+  @constant POS_LOAD The object loading position.
   @constant MOTION_LINEAR The linear motion control.
   @constant MOTION_CUSTOM The customized motion control.
   """
@@ -44,6 +45,7 @@ class TCatapult(object):
     self.POS_MAX = 840
     self.POS_MID = 420
     self.POS_INIT = self.POS_MIN
+    self.POS_LOAD = 180
     
     self.MOTION_LINEAR = 'linear'
     self.MOTION_CUSTOM = 'custom'
