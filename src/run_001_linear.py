@@ -115,10 +115,30 @@ class TCatapultLPLinear(object):
       print prefix_info, 'new entry added to dataset.'
       print ''
     
+    feature_dict = {
+      'face_init': ['1'],
+      'pos_init': [250], #[0, 100, 200, 250, 300],
+      'pos_target': [480],
+      'duration': [0.5] #[0.75, 0.5, 0.4, 0.3, 0.2, 0.1]
+    }
     
-    launch_test('1', 200, 480, 1.0)
-    launch_test('1', 300, 480, 0.5)
+    feature_space = []
+    for feature in feature_dict:
+      if len(feature_space) == 0:
+        for feature_i in feature_dict[feature]:
+          feature_space.append({feature: feature_i})
+      else:
+        new_feature_space = []
+        for feature_i in feature_dict[feature]:
+          for feature_space_i in feature_space:
+            new_feature_space_i = feature_space_i.copy() # deep copy
+            new_feature_space_i[feature] = feature_i
+            new_feature_space.append(new_feature_space_i)
+        feature_space = new_feature_space
     
+    for feature_comb in feature_space:
+      for i in range(20):
+        launch_test(feature_comb['face_init'], feature_comb['pos_init'], feature_comb['pos_target'], feature_comb['duration']);
     
     print 'datafile:', filepath_save
     
