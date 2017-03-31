@@ -10,10 +10,11 @@ __website__   = 'www.davidqiu.com'
 __copyright__ = 'Copyright (C) 2017, David Qiu. All rights reserved.'
 
 
+import os
 import sys
 import time
 
-sys.path.append('../lib/finger')
+sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/finger'))
 from dynamixel_lib import *
 
 
@@ -63,7 +64,14 @@ class TCatapult(object):
     @return An integer indicating the current position of the catapult. (range: 
             POS_MIN ~ POS_MAX)
     """
-    ctrl_pos = self._dxl.Position()
+    ctrl_pos = None
+    retry_count = 0
+    while ctrl_pos is None:
+      ctrl_pos = self._dxl.Position()
+      if ctrl_pos is None:
+        print '[Catapult] Warning: Failed to get position. Retry after 0.001 sec. ({})'.format(retry_count)
+        time.sleep(0.001)
+        retry_count += 1
     
     pos = min(self.POS_MAX, max(self._POS_BASE - ctrl_pos, self.POS_MIN))
     
