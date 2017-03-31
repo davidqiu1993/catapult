@@ -15,6 +15,7 @@ from catapult import *
 import time
 import datetime
 import yaml
+import sys
 
 import pdb
 
@@ -117,9 +118,9 @@ class TCatapultLPLinear(object):
     
     feature_dict = {
       'face_init': ['1'],
-      'pos_init': [250], #[0, 100, 200, 250, 300],
-      'pos_target': [480],
-      'duration': [0.5] #[0.75, 0.5, 0.4, 0.3, 0.2, 0.1]
+      'pos_init': [0],#[50, 100, 200],
+      'pos_target': [480],#[500],
+      'duration': [0.05]#[0.2, 0.15, 0.10, 0.05]
     }
     
     feature_space = []
@@ -137,16 +138,27 @@ class TCatapultLPLinear(object):
         feature_space = new_feature_space
     
     for feature_comb in feature_space:
-      for i in range(20):
+      for i in range(1):
         launch_test(feature_comb['face_init'], feature_comb['pos_init'], feature_comb['pos_target'], feature_comb['duration']);
     
     print 'datafile:', filepath_save
-    
-    
+  
+  def _run_cma_throw_farther(self):
+    pass
+  
+  def getOperations(self):
+    operation_dict = {
+      'data_collection': self._run_data_collection,
+      'cma_throw_farther': self._run_cma_throw_farther
+    }
+    return operation_dict
   
   def run(self, operation):
-    if operation == 'data_collection':
-      return self._run_data_collection()
+    operation_dict = self.getOperations()
+    
+    if operation in operation_dict:
+      op_func = operation_dict[operation]
+      return op_func()
     
     raise ValueError('Invalid operation.', operation)
 
@@ -155,6 +167,15 @@ class TCatapultLPLinear(object):
 if __name__ == '__main__':
   catapult = TCatapult(reset=False)
   agent = TCatapultLPLinear(catapult)
-  agent.run('data_collection')
+  
+  operation = 'data_collection'
+  if len(sys.argv) >= 2:
+    if len(sys.argv) == 2 and (sys.argv[1] in agent.getOperations()):
+      operation = sys.argv[1]
+    else:
+      print 'usage: ./run_001_linear.py <operation>'
+      quit()
+  
+  agent.run(operation)
 
 
