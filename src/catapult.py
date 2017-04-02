@@ -94,7 +94,14 @@ class TCatapult(object):
     """
     ctrl_steps = int(duration / interval)
     
-    ctrl_pos_original = float(self._dxl.Position())
+    ctrl_pos_original = None
+    retry_count_ctrl_pos_original = 0
+    while ctrl_pos_original is None:
+      ctrl_pos_original = float(self._dxl.Position())
+      if ctrl_pos_original is None:
+        print '[Catapult] Warning: Failed to get position. Retry after 0.001 sec. ({})'.format(retry_count_ctrl_pos_original)
+        time.sleep(0.001)
+        retry_count_ctrl_pos_original += 1
     ctrl_pos_target = float(self._POS_BASE) - float(position)
     ctrl_pos_interval = (float(ctrl_pos_target) - float(ctrl_pos_original)) / float(ctrl_steps)
     
