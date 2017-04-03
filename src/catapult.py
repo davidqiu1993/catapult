@@ -189,13 +189,17 @@ class TCatapultDataset(object):
   @property append_size The size of the appended dataset.
   """
   
-  def __init__(self, abs_dirpath=None, verbose=True):
+  def __init__(self, abs_dirpath=None, verbose=True, auto_init=True):
     """
     Initialize a catapult dataset controller.
     
     @param abs_dirpath The absolute dataset directory path. `None` indicates 
                        using the default dataset directory path. (default: None)
     @param verbose A boolean indicating if prints verbose logs.
+    @param auto_init A boolean indicating if automatically load data from the 
+                     dataset directory and initialize the appended dataset YAML 
+                     file. Note that the appended dataset YAML file will still 
+                     be initialized automatically if new entry is appended.
     """
     super(TCatapultDataset, self).__init__()
     
@@ -207,15 +211,25 @@ class TCatapultDataset(object):
     self._prefix = 'catapult/dataset'
     self._prefix_info = self._prefix + ':'
     
-    self._dataset_append_yaml_filename = 'catapult_' + '{:%Y%m%d_%H%M%S_%f}'.format(datetime.datetime.now()) + '.yaml'
-    self._dataset_append_yaml_filepath = os.path.abspath(os.path.join(self._dataset_dirpath, self._dataset_append_yaml_filename))
-    
     self._dataset = []
     self._dataset_append = []
     
-    self._dataset_append_yaml_file = open(self._dataset_append_yaml_filepath, 'w')
+    self._dataset_append_yaml_filename = None
+    self._dataset_append_yaml_filepath = None
+    self._dataset_append_yaml_file = None
     
-    self._load_dataset()
+    if auto_init:
+      self.load_dataset()
+      self.init_yaml()
+  
+  def __getitem__(self, key):
+    return self.fetch(key)
+
+  def __iter__(self):
+    return self._dataset.__iter__()
+  
+  def __contains__(self, key):
+    return self._dataset.__contains__(key)
   
   @property
   def dirpath(self):
@@ -237,9 +251,8 @@ class TCatapultDataset(object):
   def append_size(self):
     return len(self._dataset_append)  
   
-  def _load_dataset(self):
+  def load_dataset(self):
     """
-    (Internal Method)
     Load the data from the dataset directory. Note the the original data will 
     be flushed before loading data from the dataset directory.
     """
@@ -258,6 +271,15 @@ class TCatapultDataset(object):
         if cur_dataset is not None:
           for entry in cur_dataset:
             self._dataset.append(entry)
+  
+  def init_yaml(self):
+    """
+    Initialize the appended dataset YAML file. The file will be named according 
+    to the current system date and time.
+    """
+    self._dataset_append_yaml_filename = 'catapult_' + '{:%Y%m%d_%H%M%S_%f}'.format(datetime.datetime.now()) + '.yaml'
+    self._dataset_append_yaml_filepath = os.path.abspath(os.path.join(self._dataset_dirpath, self._dataset_append_yaml_filename))
+    self._dataset_append_yaml_file = open(self._dataset_append_yaml_filepath, 'w')
   
   def new_entry(self, motion, action={}, result={}):
     """
@@ -322,11 +344,24 @@ class TCatapultDataset(object):
     assert(type(entry['action']) is dict)
     assert(type(entry['result']) is dict)
     
+    if self._dataset_append_yaml_file is None:
+      self.init_yaml()
+    
     self._dataset.append(entry)
     self._dataset_append.append(entry)
     
     yaml.dump([self._dataset_append[-1]], self._dataset_append_yaml_file, default_flow_style=False)
     if self._verbose:
       print self._prefix_info, 'new entry added to dataset.'
+  
+  def fetch(self, entry_index):
+    """
+    Fetch an entry by its index.
+    
+    @param entry_index The index of the entry.
+    @return The entry fetched from the dataset. Note that error will be thrown 
+            if the entry is not found.
+    """
+    return self._dataset[entry_index]
 
 

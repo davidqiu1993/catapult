@@ -35,8 +35,6 @@ class TCatapultLPLinear(object):
     
     self.catapult = catapult
     
-    self._dataset = None
-    
     self.reset()
   
   def reset(self):
@@ -55,7 +53,7 @@ class TCatapultLPLinear(object):
     
     return pos_init_actual, pos_target_actual
   
-  def _launch_test(self, face_init, pos_init, pos_target, duration, check_thrown=False, prefix='catapult'):
+  def _launch_test(self, dataset, face_init, pos_init, pos_target, duration, check_thrown=False, prefix='catapult'):
     prefix_info = prefix + ':'
     
     captured = False
@@ -105,9 +103,8 @@ class TCatapultLPLinear(object):
               captured = False
               break
     
-    entry = self._dataset.new_entry_linear(face_init, pos_init, pos_init_actual, pos_target, pos_target_actual, duration, loc_land, loc_stop, face_stop)
-    self._dataset.append(entry)
-    print ''
+    entry = dataset.new_entry_linear(face_init, pos_init, pos_init_actual, pos_target, pos_target_actual, duration, loc_land, loc_stop, face_stop)
+    dataset.append(entry)
     
     return entry
   
@@ -115,8 +112,7 @@ class TCatapultLPLinear(object):
     prefix = 'catapult/data_collection'
     prefix_info = prefix + ':'
     
-    if self._dataset is None:
-      self._dataset = TCatapultDataset()
+    dataset = TCatapultDataset()
     
     feature_dict = {
       'face_init': ['1'],
@@ -145,9 +141,10 @@ class TCatapultLPLinear(object):
       count_feature += 1
       for i in range(n_samples):
         print prefix_info, 'samples: {}/{}, feature: {}/{}'.format(i+1, n_samples, count_feature, len(feature_space))
-        self._launch_test(feature_comb['face_init'], feature_comb['pos_init'], feature_comb['pos_target'], feature_comb['duration'], prefix=prefix);
+        self._launch_test(dataset, feature_comb['face_init'], feature_comb['pos_init'], feature_comb['pos_target'], feature_comb['duration'], prefix=prefix)
+        print ''
     
-    print 'datafile:', self._dataset.append_filepath
+    print 'datafile:', dataset.append_filepath
   
   def _correct_action(self, pos_init, pos_target, duration):
     if pos_init < self.catapult.POS_MIN: pos_init = self.catapult.POS_MIN
@@ -163,8 +160,7 @@ class TCatapultLPLinear(object):
     prefix = 'catapult/cma_throw_farther'
     prefix_info = prefix + ':'
     
-    if self._dataset is None:
-      self._dataset = TCatapultDataset()
+    dataset = TCatapultDataset()
     
     self._run_cma_throw_farther_count_test = 0
     def f(x):
@@ -176,7 +172,7 @@ class TCatapultLPLinear(object):
       pos_init, pos_target, duration = self._correct_action(pos_0, pos_t, t)
       entry = None
       if pos_init != pos_target:
-        entry = self._launch_test('1', int(pos_init), int(pos_target), float(duration), check_thrown=True, prefix=prefix)
+        entry = self._launch_test(dataset, '1', int(pos_init), int(pos_target), float(duration), check_thrown=True, prefix=prefix)
       loss = 1
       if entry is not None:
         loss = -float(entry['result']['loc_land'])
@@ -186,10 +182,66 @@ class TCatapultLPLinear(object):
     print prefix_info, 'result =', res
     print prefix_info, 'optimal solution found. (pos_init = {}, pos_target = {}, duration = {})'.format(res[0][0], res[0][1], res[0][2])
   
+  def _run_check_dataset(self):
+    prefix = 'catapult/check_dataset'
+    prefix_info = prefix + ':'
+    
+    VALID_FACE_INIT           = ['1', '2', '3', '4']
+    VALID_FACE_STOP           = ['1', '2', '3', '4', 'side']
+    VALID_POS_DIFF_THRESHOLD  = 10
+    
+    dataset = TCatapultDataset(auto_init=False)
+    dataset.load_dataset()
+    
+    count_invalid_entries = 0
+    count_suspicious_entries = 0
+    for entry in dataset:
+      is_invalid = False
+      is_suspicious = False
+      
+      if not (entry['motion'] == 'linear'): is_invalid = True
+      
+      if not (type(entry['action']) is dict): is_invalid = True
+      if entry['action']['face_init'] is None: is_invalid = True
+      if entry['action']['face_init'] not in VALID_FACE_INIT: is_invalid = True
+      if entry['action']['pos_init'] is None: is_invalid = True
+      if entry['action']['pos_init_actual'] is None: is_invalid = True
+      if np.abs(entry['action']['pos_init'] - entry['action']['pos_init_actual']) >= VALID_POS_DIFF_THRESHOLD: is_suspicious = True
+      if entry['action']['pos_target'] is None: is_invalid = True
+      if entry['action']['pos_target_actual'] is None: is_invalid = True
+      if np.abs(entry['action']['pos_target'] - entry['action']['pos_target_actual']) >= VALID_POS_DIFF_THRESHOLD: is_suspicious = True
+      if np.abs(entry['action']['pos_init']   - entry['action']['pos_init_actual'])   == 0 and \
+         np.abs(entry['action']['pos_target'] - entry['action']['pos_target_actual']) == 0: is_suspicious = True
+      if entry['action']['duration'] is None: is_invalid = True
+      if entry['action']['duration'] < 0: is_invalid = True
+      
+      if not (type(entry['result']) is dict): is_invalid = True
+      if entry['result']['face_stop'] is None: is_invalid = True
+      if entry['result']['face_stop'] not in VALID_FACE_STOP: is_invalid = True
+      if entry['result']['loc_land'] is None: is_invalid = True
+      if entry['result']['loc_stop'] is None: is_invalid = True
+      
+      if is_invalid:
+        count_invalid_entries += 1
+        print prefix_info, 'invalid entry found >>> '
+        print entry
+        print ''
+      
+      elif is_suspicious:
+        count_suspicious_entries += 1
+        print prefix_info, 'suspicious entry found >>> '
+        print entry
+        print ''
+    
+    print prefix_info, 'entries    = {}'.format(dataset.size)
+    print prefix_info, 'suspicious = {}/{}'.format(count_suspicious_entries, dataset.size)
+    print prefix_info, 'invalid    = {}/{}'.format(count_invalid_entries, dataset.size)
+  
   def getOperations(self):
     operation_dict = {
       'data_collection': self._run_data_collection,
-      'cma_throw_farther': self._run_cma_throw_farther
+      'cma_throw_farther': self._run_cma_throw_farther,
+      'check_dataset': self._run_check_dataset
     }
     return operation_dict
   
@@ -208,7 +260,7 @@ if __name__ == '__main__':
   catapult = TCatapult(reset=False)
   agent = TCatapultLPLinear(catapult)
   
-  operation = 'cma_throw_farther'
+  operation = 'check_dataset'
   if len(sys.argv) >= 2:
     if len(sys.argv) == 2 and (sys.argv[1] in agent.getOperations()):
       operation = sys.argv[1]
