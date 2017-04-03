@@ -27,7 +27,7 @@ if __name__ == '__main__':
   
   filepath = sys.argv[1]
   
-  prefix = 'catapult/consistency'
+  prefix = 'catapult/plot_consistency'
   prefix_info = prefix + ':'
   
   with open(filepath, 'r') as yaml_file:
