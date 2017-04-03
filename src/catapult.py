@@ -278,15 +278,15 @@ class TCatapultDataset(object):
     
     return entry
   
-  def new_entry_linear(self, face_init, pos_init, pos_init_actural, pos_target, pos_target_actural, duration, loc_land, loc_stop, face_stop):
+  def new_entry_linear(self, face_init, pos_init, pos_init_actual, pos_target, pos_target_actual, duration, loc_land, loc_stop, face_stop):
     """
     Create a new entry for linear motion.
     
     @param face_init The initial face.
     @param pos_init The initial catapult position.
-    @param pos_init_actural The actual initial catapult position.
+    @param pos_init_actual The actual initial catapult position.
     @param pos_target The catapult target position.
-    @param pos_target_actural The actual catapult target position.
+    @param pos_target_actual The actual catapult target position.
     @param duration The time duration of the linear motion.
     @param loc_land The landing location.
     @param loc_stop The stopping location.
@@ -297,9 +297,9 @@ class TCatapultDataset(object):
     action = {
       'face_init':          face_init,
       'pos_init':           pos_init,
-      'pos_init_actural':   pos_init_actural,
+      'pos_init_actual':   pos_init_actual,
       'pos_target':         pos_target,
-      'pos_target_actural': pos_target_actural,
+      'pos_target_actual': pos_target_actual,
       'duration':           duration
     }
     result = {

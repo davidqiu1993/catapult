@@ -45,24 +45,24 @@ class TCatapultLPLinear(object):
   def throw(self, pos_init, pos_target, duration):
     self.catapult.move(pos_init, duration=1.0, interval=0.01, wait=False)
     time.sleep(1.0)
-    pos_init_actural = self.catapult.position
+    pos_init_actual = self.catapult.position
     
     self.catapult.move(pos_target, duration=duration, interval=0.01, wait=False, motion=self.catapult.MOTION_LINEAR)
     time.sleep(1.0)
-    pos_target_actural = self.catapult.position
+    pos_target_actual = self.catapult.position
     
     self.reset()
     
-    return pos_init_actural, pos_target_actural
+    return pos_init_actual, pos_target_actual
   
   def _launch_test(self, face_init, pos_init, pos_target, duration, check_thrown=False, prefix='catapult'):
     prefix_info = prefix + ':'
     
     captured = False
     while not captured:
-      print prefix_info, 'face_init = {}, pos_init = {}, pos_target = {}, duration = {}'.format(face_init, pos_init, pos_target, duration)
+      print prefix_info, 'face_init = {}, pos_init = {} ({}), pos_target = {} ({}), duration = {}'.format(face_init, pos_init, pos_init_actual, pos_target, pos_target_actual, duration)
       input_ready = raw_input(prefix_info + ' ready (Y)?> ')
-      pos_init_actural, pos_target_actural = self.throw(pos_init, pos_target, duration)
+      pos_init_actual, pos_target_actual = self.throw(pos_init, pos_target, duration)
       
       input_captured = raw_input(prefix_info + ' captured (Y/n)?> ')
       if input_captured == '' or input_captured == 'y' or input_captured == 'Y':
@@ -105,7 +105,7 @@ class TCatapultLPLinear(object):
               captured = False
               break
     
-    entry = self._dataset.new_entry_linear(face_init, pos_init, pos_init_actural, pos_target, pos_target_actural, duration, loc_land, loc_stop, face_stop)
+    entry = self._dataset.new_entry_linear(face_init, pos_init, pos_init_actual, pos_target, pos_target_actual, duration, loc_land, loc_stop, face_stop)
     self._dataset.append(entry)
     print ''
     
