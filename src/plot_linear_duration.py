@@ -27,6 +27,9 @@ if __name__ == '__main__':
   
   filepath = sys.argv[1]
   
+  prefix = 'catapult/plot_linear_duration'
+  prefix_info = prefix + ':'
+  
   with open(filepath, 'r') as yaml_file:
     dataset = yaml.load(yaml_file)
     
@@ -44,10 +47,10 @@ if __name__ == '__main__':
         assert(entry['action']['pos_init'] == check_pos_init)
         assert(entry['action']['pos_target'] == check_pos_target)
     n_samples = len(dataset)
-    print 'samples =', n_samples
-    print 'face_init =', check_face_init
-    print 'pos_init =', check_pos_init
-    print 'pos_target =', check_pos_target
+    print prefix_info, 'samples =', n_samples
+    print prefix_info, 'face_init =', check_face_init
+    print prefix_info, 'pos_init =', check_pos_init
+    print prefix_info, 'pos_target =', check_pos_target
     
     # Configurations
     plt.figure(num=1, figsize=(6, 8), dpi=120, facecolor='w', edgecolor='k')
