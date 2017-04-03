@@ -27,35 +27,31 @@ if __name__ == '__main__':
   
   filepath = sys.argv[1]
   
+  prefix = 'catapult/consistency'
+  prefix_info = prefix + ':'
+  
   with open(filepath, 'r') as yaml_file:
     dataset = yaml.load(yaml_file)
     
     # Dataset check
-    check_face_init = None
-    check_pos_init = None
-    check_pos_target = None
-    check_duration = None
+    assert(len(dataset) > 1)
+    check_action = None
     for entry in dataset:
-      if check_pos_init is None:
-        check_face_init = entry['action']['face_init']
-        check_pos_init = entry['action']['pos_init']
-        check_pos_target = entry['action']['pos_target']
-        check_duration = entry['action']['duration']
+      if check_action is None:
+        check_action = entry['action']
       else:
-        assert(entry['action']['face_init'] == check_face_init)
-        assert(entry['action']['pos_init'] == check_pos_init)
-        assert(entry['action']['pos_target'] == check_pos_target)
-        assert(entry['action']['duration'] == check_duration)
+        for k in check_action:
+          if '_actual' not in k:
+            assert(check_action[k] == entry['action'][k])
     n_samples = len(dataset)
-    print 'samples =', n_samples
-    print 'face_init =', check_face_init
-    print 'pos_init =', check_pos_init
-    print 'pos_target =', check_pos_target
-    print 'duration =', check_duration
+    print prefix_info, 'samples =', n_samples
+    for k in check_action:
+      if '_actual' not in k:
+        print prefix_info, '{} = {}'.format(k, check_action[k])
     
     # Configurations
     LOC_MIN = 0
-    LOC_MAX = 1500
+    LOC_MAX = 2000
     LOC_LAND_ACCURACY = 10
     LOC_STOP_ACCURACY = 10
     plt.figure(num=1, figsize=(6, 8), dpi=120, facecolor='w', edgecolor='k')
