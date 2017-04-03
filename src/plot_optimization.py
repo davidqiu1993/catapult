@@ -27,7 +27,7 @@ if __name__ == '__main__':
   
   filepath = sys.argv[1]
   
-  prefix = 'catapult/plot_loc_land'
+  prefix = 'catapult/plot_optimization'
   prefix_info = prefix + ':'
   
   with open(filepath, 'r') as yaml_file:
