@@ -319,9 +319,9 @@ class TCatapultDataset(object):
     action = {
       'face_init':          face_init,
       'pos_init':           pos_init,
-      'pos_init_actual':   pos_init_actual,
+      'pos_init_actual':    pos_init_actual,
       'pos_target':         pos_target,
-      'pos_target_actual': pos_target_actual,
+      'pos_target_actual':  pos_target_actual,
       'duration':           duration
     }
     result = {
