@@ -58,16 +58,17 @@ class TCatapultLPLinear(object):
     
     captured = False
     while not captured:
-      print prefix_info, 'face_init = {}, pos_init = {} ({}), pos_target = {} ({}), duration = {}'.format(face_init, pos_init, pos_init_actual, pos_target, pos_target_actual, duration)
+      print prefix_info, 'face_init = {}, pos_init = {}, pos_target = {}, duration = {}'.format(face_init, pos_init, pos_target, duration)
       input_ready = raw_input(prefix_info + ' ready (Y)?> ')
       pos_init_actual, pos_target_actual = self.throw(pos_init, pos_target, duration)
+      print prefix_info, 'pos_init_actual = {}, pos_target_actual = {}'.format(pos_init_actual, pos_target_actual)
       
       input_captured = raw_input(prefix_info + ' captured (Y/n)?> ')
       if input_captured == '' or input_captured == 'y' or input_captured == 'Y':
         captured = True
       else:
         captured = False
-        
+      
       thrown = True
       if check_thrown and not captured:
         input_thrown = raw_input(prefix_info + ' thrown (Y/n)?> ')
@@ -156,29 +157,60 @@ class TCatapultLPLinear(object):
     duration = np.round(duration, 2)
     return pos_init, pos_target, duration
   
+  def _check_action(self, pos_init, pos_target, duration):
+    if pos_init < self.catapult.POS_MIN: return False
+    if pos_init > self.catapult.POS_MID: return False
+    if pos_target < pos_init: return False
+    if pos_target > self.catapult.POS_MAX: return False
+    if duration < 0.01: return False
+    if duration > 2.00: return False
+    return True
+  
   def _run_cma_throw_farther(self):
     prefix = 'catapult/cma_throw_farther'
     prefix_info = prefix + ':'
     
     dataset = TCatapultDataset()
     
+    self._run_cma_throw_farther_INIT_GUESS = [200.0, 480.0, 0.2 * 1000.]
+    self._run_cma_throw_farther_INIT_VAR   = 1000.0
+    self._run_cma_throw_farther_FIX_ACTION = 'check' # {'check', 'correct'}
+    
     self._run_cma_throw_farther_count_test = 0
+    
     def f(x):
       self._run_cma_throw_farther_count_test += 1
       print prefix_info, 'optimizes with CMA-ES. (test = {})'.format(self._run_cma_throw_farther_count_test)
+      
       pos_0, pos_t, t = x
       t = t / 1000.
       print prefix_info, 'sample from CMA-ES. (pos_0 = {}, pos_t = {}, t = {})'.format(pos_0, pos_t, t)
-      pos_init, pos_target, duration = self._correct_action(pos_0, pos_t, t)
+      
+      is_action_checked = True
+      if self._run_cma_throw_farther_FIX_ACTION == 'correct':
+        pos_init, pos_target, duration = self._correct_action(pos_0, pos_t, t)
+      elif self._run_cma_throw_farther_FIX_ACTION == 'check':
+        is_action_checked = self._check_action(pos_0, pos_t, t)
+        pos_init   = pos_0
+        pos_target = pos_t
+        duration   = t
+      
       entry = None
-      if pos_init != pos_target:
+      if is_action_checked and pos_init != pos_target:
         entry = self._launch_test(dataset, '1', int(pos_init), int(pos_target), float(duration), check_thrown=True, prefix=prefix)
+      
       loss = 1
-      if entry is not None:
+      if entry is None:
+        loss = 1
+        print prefix_info, 'not thrown'
+      else:
         loss = -float(entry['result']['loc_land'])
+      
+      print ''
+      
       return loss
     
-    res = cma.fmin(f, [200.0, 480.0, 0.5 * 1000.], 10.0, verb_disp=False, verb_log=0)
+    res = cma.fmin(f, self._run_cma_throw_farther_INIT_GUESS, self._run_cma_throw_farther_INIT_VAR, verb_disp=False, verb_log=0, popsize=20)
     print prefix_info, 'result =', res
     print prefix_info, 'optimal solution found. (pos_init = {}, pos_target = {}, duration = {})'.format(res[0][0], res[0][1], res[0][2])
   
