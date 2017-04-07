@@ -13,11 +13,19 @@ __copyright__ = 'Copyright (C) 2017, David Qiu. All rights reserved.'
 from catapult import *
 
 import time
+import sys
 
 
 if __name__ == '__main__':
+  pos_base = None
+  if len(sys.argv) == 2:
+    pos_base = int(sys.argv[1])
+  
   print 'Initialize a catapult controller.'
-  catapult = TCatapult()
+  if pos_base is None:
+    catapult = TCatapult()
+  else:
+    catapult = TCatapult(_pos_base=pos_base)
   
   time.sleep(0.5)
   

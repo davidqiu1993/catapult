@@ -34,16 +34,17 @@ class TCatapult(object):
   @constant MOTION_CUSTOM The customized motion control.
   """
   
-  def __init__(self, reset=True):
+  def __init__(self, reset=True, _pos_base=2300):
     """
     Initialize a catapult controller.
     
     @param reset A boolean indicating if resets the position of the catapult to 
                  its initial position. (default: True)
+    @param _pos_base The base value for the position conversion.
     """
     super(TCatapult, self).__init__()
     
-    self._POS_BASE = 2300
+    self._POS_BASE = _pos_base
     self.POS_MIN = 0
     self.POS_MAX = 840
     self.POS_MID = 420

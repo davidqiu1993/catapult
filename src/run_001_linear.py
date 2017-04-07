@@ -12,6 +12,7 @@ __copyright__ = 'Copyright (C) 2017, David Qiu. All rights reserved.'
 
 from catapult import *
 
+import os
 import time
 import datetime
 import yaml
@@ -30,10 +31,12 @@ class TCatapultLPLinear(object):
   Catapult learning and planning agent in linear motion control.
   """
   
-  def __init__(self, catapult):
+  def __init__(self, catapult, abs_dirpath_data=None):
     super(TCatapultLPLinear, self).__init__()
     
     self.catapult = catapult
+    
+    self._abs_dirpath_data = abs_dirpath_data
     
     self.reset()
   
@@ -114,7 +117,10 @@ class TCatapultLPLinear(object):
     prefix = 'catapult/data_collection'
     prefix_info = prefix + ':'
     
-    dataset = TCatapultDataset()
+    if self._abs_dirpath_data is None:
+      dataset = TCatapultDataset()
+    else:
+      dataset = TCatapultDataset(abs_dirpath=self._abs_dirpath_data)
     
     feature_dict = {
       'face_init': ['1'],
@@ -219,7 +225,10 @@ class TCatapultLPLinear(object):
     prefix = 'catapult/cma_throw_farther'
     prefix_info = prefix + ':'
     
-    dataset = TCatapultDataset()
+    if self._abs_dirpath_data is None:
+      dataset = TCatapultDataset()
+    else:
+      dataset = TCatapultDataset(abs_dirpath=self._abs_dirpath_data)
     
     self._run_cma_throw_farther_INIT_GUESS = [200.0, 480.0, 0.3 * 1000.]
     self._run_cma_throw_farther_INIT_VAR   = 300.0
@@ -266,6 +275,21 @@ class TCatapultLPLinear(object):
     print prefix_info, 'result =', res
     print prefix_info, 'optimal solution found. (pos_init = {}, pos_target = {}, duration = {} ({}))'.format(res[0][0], res[0][1], round(res[0][2] / 1000., 2), res[0][2])
   
+  def _run_same_throw(self):
+    prefix = 'catapult/same_throw'
+    prefix_info = prefix + ':'
+    
+    face_init = '1'
+    pos_init = 200
+    pos_target = 400
+    duration = 0.01
+    print prefix_info, 'face_init = {}, pos_init = {}, pos_target = {}, duration = {}'.format(face_init, pos_init, pos_target, duration)
+    
+    input_ready = raw_input(prefix_info + ' ready (Y)?> ')
+    pos_init_actual, pos_target_actual = self.throw(pos_init, pos_target, duration)
+    print prefix_info, 'pos_init_actual = {}, pos_target_actual = {}'.format(pos_init_actual, pos_target_actual)
+    print prefix_info, 'expected_land_loc = ~{}'.format(1200)
+  
   def _run_check_dataset(self):
     prefix = 'catapult/check_dataset'
     prefix_info = prefix + ':'
@@ -274,7 +298,10 @@ class TCatapultLPLinear(object):
     VALID_FACE_STOP           = ['1', '2', '3', '4', 'side']
     VALID_POS_DIFF_THRESHOLD  = 10
     
-    dataset = TCatapultDataset(auto_init=False)
+    if self._abs_dirpath_data is None:
+      dataset = TCatapultDataset(auto_init=False)
+    else:
+      dataset = TCatapultDataset(abs_dirpath=self._abs_dirpath_data, auto_init=False)
     dataset.load_dataset()
     
     count_invalid_entries = 0
@@ -325,7 +352,8 @@ class TCatapultLPLinear(object):
     operation_dict = {
       'data_collection': self._run_data_collection,
       'cma_throw_farther': self._run_cma_throw_farther,
-      'check_dataset': self._run_check_dataset
+      'check_dataset': self._run_check_dataset,
+      'same_throw': self._run_same_throw
     }
     return operation_dict
   
@@ -341,8 +369,13 @@ class TCatapultLPLinear(object):
 
 
 if __name__ == '__main__':
-  catapult = TCatapult(reset=False)
-  agent = TCatapultLPLinear(catapult)
+  catapult_name = 'catapult_001'
+  pos_base = 2300
+  
+  catapult = TCatapult(reset=False, _pos_base=pos_base)
+  
+  abs_dirpath_data = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/' + catapult_name))
+  agent = TCatapultLPLinear(catapult, abs_dirpath_data=abs_dirpath_data)
   
   operation = 'check_dataset'
   if len(sys.argv) >= 2:
