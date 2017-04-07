@@ -18,6 +18,8 @@ import yaml
 import sys
 import numpy as np
 import random
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 from keras.models import Sequential
 from keras.layers import Dense, Dropout, Activation
@@ -42,20 +44,22 @@ class TCatapultModelLinear(object):
       loader_dataset = TCatapultDataset(abs_dirpath=abs_dirpath_data, auto_init=False)
     loader_dataset.load_dataset()
     for entry in loader_dataset:
-      if entry['motion'] == 'linear':
+      #if entry['motion'] == 'linear':
+      if entry['motion'] == 'linear' and np.round(entry['action']['duration'], 2) == 0.01:
         self._dataset.append(entry)
-
 
     self._model = self._create_model()
 
   def _create_model(self):
+    dropout_rate = 0.01
+
     model = Sequential()
-    model.add(Dense(128, input_dim=3, activation='relu'))
-    model.add(Dropout(0.05))
-    model.add(Dense(128, activation='relu'))
-    model.add(Dropout(0.05))
-    #model.add(Dense(128, activation='relu'))
-    #model.add(Dropout(0.01))
+    model.add(Dense(200, input_dim=3, activation='relu'))
+    model.add(Dropout(dropout_rate))
+    model.add(Dense(200, activation='relu'))
+    model.add(Dropout(dropout_rate))
+    model.add(Dense(200, activation='relu'))
+    model.add(Dropout(dropout_rate))
     model.add(Dense(1, activation='linear'))
     model.compile(loss='mse', optimizer=RMSprop(lr=0.01))
     #model.compile(loss='mse', optimizer=SGD(lr=0.01, decay=1e-6, momentum=0.9, nesterov=True))
@@ -134,8 +138,75 @@ class TCatapultModelLinear(object):
     print('acc_err_loc_land =', np.round(ave_err_loc_land, 2))
     print('acc_err_loc_land_cheat =', np.round(ave_err_loc_land_cheat, 2))
 
-  def _plot_predictions(self):
-    pass
+  def _plot_prediction_errors(self, validation_dataset):
+    LOC_MIN = 0
+    LOC_MAX = 2000
+
+    n_samples = len(validation_dataset)
+    plt.figure(num=1, figsize=(8, 6), dpi=120, facecolor='w', edgecolor='k')
+
+    X_valid = []
+    Y_valid = []
+    for entry in validation_dataset:
+      X_i = [entry['action']['pos_init_actual'], 
+             entry['action']['pos_target_actual'], 
+             entry['action']['duration'] * 1000.]
+      Y_i = [entry['result']['loc_land']]
+      X_valid.append(X_i)
+      Y_valid.append(Y_i)
+
+    Y_predict = self._model.predict(X_valid)
+
+    plt.title('Prediction Errors (b: ori, r: pred)')
+    #plt.axis([LOC_MIN, LOC_MAX * 1.01, LOC_MIN, LOC_MAX * 1.01])
+    plt.xlabel('distance')
+    plt.ylabel('loc_land')
+    loc_land_original   = [(Y_valid[i][0])   for i in range(n_samples)]
+    loc_land_prediction = [(Y_predict[i][0]) for i in range(n_samples)]
+    plt.scatter(loc_land_original, loc_land_original,   color='b')
+    plt.scatter(loc_land_original, loc_land_prediction, color='r')
+
+    plt.show()
+
+  def _plot_prediction_errors_pos(self, validation_dataset, duration=0.01):
+    LOC_MIN = 0
+    LOC_MAX = 2000
+
+    dataset = []
+    for entry in validation_dataset:
+      if np.round(entry['action']['duration'], 2) == duration:
+        dataset.append(entry)
+
+    n_samples = len(dataset)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    X_valid = []
+    Y_valid = []
+    for entry in dataset:
+      X_i = [entry['action']['pos_init_actual'], 
+             entry['action']['pos_target_actual'], 
+             entry['action']['duration'] * 1000.]
+      Y_i = [entry['result']['loc_land']]
+      X_valid.append(X_i)
+      Y_valid.append(Y_i)
+
+    Y_predict = self._model.predict(X_valid)
+
+    #plt.title('Prediction Errors (b: ori, r: pred)')
+    ax.set_xlabel('pos_init')
+    ax.set_ylabel('pos_target')
+    ax.set_zlabel('loc_land')
+
+    pos_init            = [(X_valid[i][0])   for i in range(n_samples)]
+    pos_target          = [(X_valid[i][1])   for i in range(n_samples)]
+    loc_land_original   = [(Y_valid[i][0])   for i in range(n_samples)]
+    loc_land_prediction = [(Y_predict[i][0]) for i in range(n_samples)]
+
+    plt.scatter(pos_init, pos_target, zs=loc_land_original,   c='b', marker='o', s=3.0)
+    plt.scatter(pos_init, pos_target, zs=loc_land_prediction, c='r', marker='^', s=3.0)
+
+    plt.show()
 
   def _penalize_action(self, pos_init, pos_target, duration):
     prefix = 'penalize_action'
@@ -229,26 +300,38 @@ class TCatapultModelLinear(object):
     return optimal_action
 
   def run(self):
-    training_method   = 'minibatch' # 'batch', 'minibatch'
-    batch_rounds      = 128
+    training_method   = 'batch' # 'batch', 'minibatch'
+    batch_rounds      = 512
     minibatch_size    = 64
     minibatch_rounds  = int(len(self._dataset) / minibatch_size) * int(np.sqrt(len(self._dataset))) * 2 + 1
     minibatch_epochs  = 8
 
+    ready_input = input('train with ' + training_method + ', ready (Y)?> ')
     if training_method == 'batch':
-      self._train_model_batch(nb_epoch=batch_rounds, cheat=True)
+      self._train_model_batch(nb_epoch=batch_rounds, cheat=False, cheat_threshold=1000)
     elif training_method == 'minibatch':
       for i in range(minibatch_rounds):
-        self._train_model_minibatch(batch_size=minibatch_size, nb_epoch=minibatch_epochs, cheat=False)
+        self._train_model_minibatch(batch_size=minibatch_size, nb_epoch=minibatch_epochs, cheat=False, cheat_threshold=1000)
         print('minibatch: {}/{}'.format(i+1, minibatch_rounds))
     else:
       assert(False)
     
     self._validate(self._dataset)
 
-    should_optimize_input = input('optimize (Y/n)?> ')
-    if (should_optimize_input == '' or should_optimize_input == 'Y' or should_optimize_input == 'y'):
-      print(self._optimize_cma())
+    print('options:')
+    print('  (0) plotting prediction errors')
+    print('  (1) optimization with CMA-ES')
+    print('  (2) plotting prediction errors w.r.t. pos')
+    option_input = input('option (0/1/2/...)?> ')
+    option = option_input.lower()
+    if option == '1':
+      res = self._optimize_cma()
+      print(res)
+    elif option == '2':
+      self._plot_prediction_errors_pos(self._dataset, duration=0.01)
+    else:
+      self._plot_prediction_errors(self._dataset)
+
 
 
 if __name__ == '__main__':
