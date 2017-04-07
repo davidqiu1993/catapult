@@ -229,17 +229,17 @@ class TCatapultModelLinear(object):
     return optimal_action
 
   def run(self):
-    training_method = 'minibatch' # 'batch', 'minibatch'
-    batch_rounds = 128
-    minibatch_rounds = 512
-    minibatch_epochs = 32
-
+    training_method   = 'minibatch' # 'batch', 'minibatch'
+    batch_rounds      = 128
+    minibatch_size    = 64
+    minibatch_rounds  = int(len(self._dataset) / minibatch_size) * int(np.sqrt(len(self._dataset))) * 2
+    minibatch_epochs  = 8
 
     if training_method == 'batch':
       self._train_model_batch(nb_epoch=batch_rounds, cheat=True)
     elif training_method == 'minibatch':
       for i in range(minibatch_rounds):
-        self._train_model_minibatch(batch_size=minibatch_epochs, cheat=False)
+        self._train_model_minibatch(batch_size=minibatch_size, nb_epoch=minibatch_epochs, cheat=False)
         print('minibatch: {}/{}'.format(i+1, minibatch_rounds))
     else:
       assert(False)
