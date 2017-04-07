@@ -232,7 +232,7 @@ class TCatapultModelLinear(object):
     training_method   = 'minibatch' # 'batch', 'minibatch'
     batch_rounds      = 128
     minibatch_size    = 64
-    minibatch_rounds  = int(len(self._dataset) / minibatch_size) * int(np.sqrt(len(self._dataset))) * 2
+    minibatch_rounds  = int(len(self._dataset) / minibatch_size) * int(np.sqrt(len(self._dataset))) * 2 + 1
     minibatch_epochs  = 8
 
     if training_method == 'batch':
