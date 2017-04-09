@@ -39,133 +39,66 @@ class TCatapultSim(object):
     """
     super(TCatapultSim, self).__init__()
     
-    self._dirpath_sim = dirpath_sim;
-    
+    self._dirpath_sim = os.path.abspath(dirpath_sim);
+    self._filepath_msg_simulator = os.path.abspath(os.path.join(self._dirpath_sim, 'msg_simulator.msg'))
+    self._filepath_msg_controller = os.path.abspath(os.path.join(self._dirpath_sim, 'msg_controller.msg'))
+
     self.POS_MIN  = 0.0 * math.pi
     self.POS_MAX  = 1.0 * math.pi
     self.POS_MID  = 0.5 * math.pi
     self.POS_INIT = 0.0 * math.pi
     
+    self.DURATION_MIN = 0.01
+
     self.MOTION_LINEAR = 'linear'
     self.MOTION_CUSTOM = 'custom'
   
-  #TODO
-  
-  def getPosition(self):
+  def throw_linear(self, pos_init, pos_target, duration):
     """
-    Get the current position of the catapult.
-    
-    @return An integer indicating the current position of the catapult. (range: 
-            POS_MIN ~ POS_MAX)
+    Throw from initial position to target position in linear motion. Note that 
+    this is a sychronized method, which means it will wait for the result from 
+    the catapult simulator.
+
+    @param pos_init The initial position of the catapult.
+    @param pos_target The target position of the catapult.
+    @param duration The time interval in between.
+    @return The landing location of the thrown object.
     """
-    ctrl_pos = None
-    retry_count = 0
-    while ctrl_pos is None:
-      ctrl_pos = self._dxl.Position()
-      if ctrl_pos is None:
-        print '[Catapult] Warning: Failed to get position. Retry after 0.001 sec. ({})'.format(retry_count)
-        time.sleep(0.001)
-        retry_count += 1
-    
-    pos = min(self.POS_MAX, max(self._POS_BASE - ctrl_pos, self.POS_MIN))
-    
-    return pos
-  
-  @property
-  def position(self):
-    """
-    (Property)
-    The current position of the catapult.
-    """
-    return self.getPosition()
-  
-  def _move_linear(self, position, duration, interval, wait):
-    """
-    (Internal Method)
-    Move the catapult to a desired position in linear motion.
-    """
-    ctrl_steps = int(duration / interval)
-    
-    ctrl_pos_original = None
-    retry_count_ctrl_pos_original = 0
-    while ctrl_pos_original is None:
-      ctrl_pos_original = float(self._dxl.Position())
-      if ctrl_pos_original is None:
-        print '[Catapult] Warning: Failed to get position. Retry after 0.001 sec. ({})'.format(retry_count_ctrl_pos_original)
-        time.sleep(0.001)
-        retry_count_ctrl_pos_original += 1
-    ctrl_pos_target = float(self._POS_BASE) - float(position)
-    ctrl_pos_interval = (float(ctrl_pos_target) - float(ctrl_pos_original)) / float(ctrl_steps)
-    
-    for i in range(ctrl_steps):
-      ctrl_pos = ctrl_pos_original + (i + 1) * ctrl_pos_interval
-      self._dxl.MoveTo(int(ctrl_pos), wait=False)
-      time.sleep(interval)
-    
-    self._dxl.MoveTo(int(ctrl_pos_target), wait=False)
-  
-  def _move(self, position, duration=1.0, interval=0.01, wait=False, motion=None, motion_func=None):
-    """
-    (Internal Method)
-    Move the catapult to a desired position.
-    
-    @param position The desired position.
-    @param duration The time duration to move the catapult. (default: 1.0)
-    @param interval The time interval for each control step. (default: 0.01)
-    @param wait A boolean indicating if waits at each control step for the 
-                catapult until it reaches the intermediate step position. 
-                Note that this feature will introduce unsmooth control motion. 
-                (default: False)
-    @param motion The motion control. Note that all available motion control 
-                  are defined as constant properties in this class, where 
-                  `None` indicates using the `linear` motion control and 
-                  `custom` indicates using a customized motion control, which 
-                  is defined by the customized motion control function. 
-                  (default: None)
-    @param motion_func The customized motion control function, which activates 
-                       only if the motion control is `custom`.
-    @return The actual position of the catapult after the motion control 
-            finishes.
-    """
-    assert(self.POS_MIN <= position and position <= self.POS_MAX)
-    
-    if motion is None:
-      motion = self.MOTION_LINEAR
-    
-    if motion == self.MOTION_LINEAR:
-      self._move_linear(position, duration, interval, wait)
-    elif motion == self.MOTION_CUSTOM:
-      pass
-    else:
-      raise ValueError('Invalid motion control.', motion)
-    
-    return self.getPosition()
-  
-  def move(self, position, duration=1.0, interval=0.01, wait=False, motion=None, motion_func=None):
-    """
-    Move the catapult to a desired position.
-    
-    @param position The desired position.
-    @param duration The time duration to move the catapult. (default: 1.0)
-    @param interval The time interval for each control step. (default: 0.01)
-    @param wait A boolean indicating if waits at each control step for the 
-                catapult until it reaches the intermediate step position. 
-                Note that this feature will introduce unsmooth control motion. 
-                (default: False)
-    @param motion The motion control. Note that all available motion control 
-                  are defined as constant properties in this class, where 
-                  `None` indicates using the `linear` motion control and 
-                  `custom` indicates using a customized motion control, which 
-                  is defined by the customized motion control function. 
-                  (default: None)
-    @param motion_func The customized motion control function, which activates 
-                       only if the motion control is `custom`.
-    @return The actual position of the catapult after the motion control 
-            finishes.
-    """
-    res = self._move(position=position, duration=duration, interval=interval, wait=wait, 
-                     motion=motion, motion_func=motion_func)
-    
-    return res
+    WAIT_TIME = 0.10
+
+    assert(self.POS_MIN <= pos_init and pos_init <= self.POS_MAX)
+    assert(self.POS_MIN <= pos_target and pos_target <= self.POS_MAX)
+    assert(pos_init < pos_target)
+    assert(self.DURATION_MIN <= duration)
+
+    with open(self._filepath_msg_controller, 'w') as msg_controller:
+      msg_controller.write(str(pos_init)   + ' ' + 
+                           str(pos_target) + ' ' + 
+                           str(duration)   + '\n')
+
+    hasRead = False
+    loc_land = None
+    while not hasRead:
+      line_last = None
+
+      if os.path.isfile(self._filepath_msg_simulator):
+        with open(self._filepath_msg_simulator, 'r') as msg_simulator:
+          line_incoming = msg_simulator.readline()
+          while line_incoming != '':
+            line_last = line_incoming
+            line_incoming = msg_simulator.readline()
+
+      if line_last is not None:
+        loc_land = float(line_last)
+        hasRead = True
+      else:
+        time.sleep(WAIT_TIME)
+
+    assert(hasRead)
+
+    with open(self._filepath_msg_simulator, 'w') as msg_simulator_flush:
+      msg_simulator_flush.write('')
+
+    return loc_land
 
 
