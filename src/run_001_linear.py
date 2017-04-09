@@ -369,8 +369,8 @@ class TCatapultLPLinear(object):
 
 
 if __name__ == '__main__':
-  catapult_name = 'catapult_001'
-  pos_base = 2300
+  catapult_name = 'catapult_002'
+  pos_base = 2150
   
   catapult = TCatapult(reset=False, _pos_base=pos_base)
   
