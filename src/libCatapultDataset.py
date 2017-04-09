@@ -20,7 +20,7 @@ import yaml
 
 class TCatapultDataset(object):
   """
-  Catapult controller.
+  Catapult dataset controller.
   
   @property dirpath The dataset directory path.
   @property size The size of the dataset.
