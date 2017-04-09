@@ -100,7 +100,9 @@ class TCatapultDataset(object):
     
     dataset_filepaths = []
     for dirname, dirnames, filenames in os.walk(self._dataset_dirpath):
-      dataset_filepaths = [(os.path.abspath(os.path.join(dirname, filename))) for filename in filenames]
+      for filename in filenames:
+        if filename[0] != '.':
+          dataset_filepaths.append(os.path.abspath(os.path.join(dirname, filename)))
       break
     
     for dataset_filepath in dataset_filepaths:
