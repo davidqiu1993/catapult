@@ -10,7 +10,8 @@ __website__   = 'www.davidqiu.com'
 __copyright__ = 'Copyright (C) 2017, David Qiu. All rights reserved.'
 
 
-from catapult import *
+from libCatapult import TCatapult
+from libCatapultDataset import TCatapultDataset
 
 import os
 import time
