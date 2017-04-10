@@ -27,6 +27,7 @@ class TCatapultSim(object):
   @constant POS_MAX The maximum position.
   @constant POS_MID The middle position.
   @constant POS_INIT The initial position.
+  @constant DURATION_MIN The minimum duration.
   @constant MOTION_LINEAR The linear motion control.
   @constant MOTION_CUSTOM The customized motion control.
   """
