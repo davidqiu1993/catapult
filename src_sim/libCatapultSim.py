@@ -49,7 +49,7 @@ class TCatapultSim(object):
     self.POS_MID  = 0.5 * math.pi
     self.POS_INIT = 0.0 * math.pi
     
-    self.DURATION_MIN = 0.01
+    self.DURATION_MIN = 0.05
 
     self.MOTION_LINEAR = 'linear'
     self.MOTION_CUSTOM = 'custom'
