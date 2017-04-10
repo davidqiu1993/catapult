@@ -39,15 +39,13 @@ class TCatapultLPLinearSim(object):
     self.catapult = catapult
     
     self._abs_dirpath_data = abs_dirpath_data
-    
-    self.reset()
   
   def _launch_test(self, dataset, pos_init, pos_target, duration, prefix='catapult_sim'):
     prefix_info = prefix + ':'
     
     loc_land = catapult.throw_linear(pos_init, pos_target, duration)
     
-    entry = dataset.new_entry_linear_sim(pos_init, pos_target, duration, loc_land)
+    entry = dataset.new_entry_linear_sim(float(pos_init), float(pos_target), float(duration), float(loc_land))
     dataset.append(entry)
     
     return entry
@@ -78,7 +76,7 @@ class TCatapultLPLinearSim(object):
             new_feature_space.append(new_feature_space_i)
         feature_space = new_feature_space
     
-    n_samples = 16
+    n_samples = 1
     count_feature = 0
     for feature_comb in feature_space:
       count_feature += 1
