@@ -44,10 +44,10 @@ class TCatapultSim(object):
     self._filepath_msg_simulator = os.path.abspath(os.path.join(self._dirpath_sim, 'msg_simulator.msg'))
     self._filepath_msg_controller = os.path.abspath(os.path.join(self._dirpath_sim, 'msg_controller.msg'))
 
-    self.POS_MIN  = 0.0 * math.pi
-    self.POS_MAX  = 1.0 * math.pi
-    self.POS_MID  = 0.5 * math.pi
-    self.POS_INIT = 0.0 * math.pi
+    self.POS_MIN  = 0.00 * math.pi
+    self.POS_MAX  = 0.75 * math.pi
+    self.POS_MID  = 0.50 * math.pi
+    self.POS_INIT = 0.00 * math.pi
     
     self.DURATION_MIN = 0.05
 
