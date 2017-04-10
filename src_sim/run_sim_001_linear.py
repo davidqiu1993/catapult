@@ -43,7 +43,11 @@ class TCatapultLPLinearSim(object):
   def _launch_test(self, dataset, pos_init, pos_target, duration, prefix='catapult_sim'):
     prefix_info = prefix + ':'
     
+    print prefix_info, 'launch test. (pos_init = {}, pos_target = {}, duration = {})'.format(pos_init, pos_target, duration)
+    
     loc_land = catapult.throw_linear(pos_init, pos_target, duration)
+    
+    print prefix_info, 'loc_land = {}'.format(loc_land)
     
     entry = dataset.new_entry_linear_sim(float(pos_init), float(pos_target), float(duration), float(loc_land))
     dataset.append(entry)
@@ -178,7 +182,7 @@ class TCatapultLPLinearSim(object):
         entry = None
         if is_action_checked and pos_init != pos_target:
           entry = self._launch_test(dataset, pos_init, pos_target, duration, prefix=prefix)
-        loss = 0 if entry is None else -float(entry['result']['loc_land'])
+        loss = 1 if entry is None else -float(entry['result']['loc_land'])
         print prefix_info, 'loss = {}'.format(loss)
         
       elif self._run_cma_throw_farther_CONSTRAIN_ACTION == 'correct':
@@ -186,13 +190,13 @@ class TCatapultLPLinearSim(object):
         entry = None
         if pos_init != pos_target:
           entry = self._launch_test(dataset, pos_init, pos_target, duration, prefix=prefix)
-        loss = 0 if entry is None else -float(entry['result']['loc_land'])
+        loss = 1 if entry is None else -float(entry['result']['loc_land'])
         print prefix_info, 'loss = {}'.format(loss)
       
       elif self._run_cma_throw_farther_CONSTRAIN_ACTION == 'penalize':
         pos_init, pos_target, duration, penalty = self._penalize_action(pos_init, pos_target, duration)
         entry = self._launch_test(dataset, pos_init, pos_target, duration, prefix=prefix)
-        loss_raw = 0 if entry is None else -float(entry['result']['loc_land'])
+        loss_raw = 1 if entry is None else -float(entry['result']['loc_land'])
         loss = loss_raw + penalty
         print prefix_info, 'loss = {}, penalty = {}'.format(loss, penalty)
       
@@ -204,6 +208,59 @@ class TCatapultLPLinearSim(object):
                    popsize=20, tolx=0.001, verb_disp=False, verb_log=0)
     print prefix_info, 'result =', res
     print prefix_info, 'optimal solution found. (pos_init = {}, pos_target = {}, duration = {})'.format(res[0][0], res[0][1], res[0][2])
+  
+  def _run_cma_throw_farther_pos(self):
+    prefix = 'catapult_sim/cma_throw_farther_pos'
+    prefix_info = prefix + ':'
+    
+    dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data)
+    
+    self._run_cma_throw_farther_pos_DURATION   = self.catapult.DURATION_MIN
+    self._run_cma_throw_farther_pos_INIT_GUESS = [0.2 * math.pi, 0.6 * math.pi]
+    self._run_cma_throw_farther_pos_INIT_VAR   = 1.0
+    self._run_cma_throw_farther_pos_CONSTRAIN_ACTION = 'penalize' # {'check', 'correct', 'penalize'}
+    
+    self._run_cma_throw_farther_pos_count_test = 0
+    
+    def f(x):
+      self._run_cma_throw_farther_pos_count_test += 1
+      print prefix_info, 'optimizes with CMA-ES. (test = {})'.format(self._run_cma_throw_farther_pos_count_test)
+      
+      pos_init, pos_target = x
+      duration = self._run_cma_throw_farther_pos_DURATION
+      print prefix_info, 'sample from CMA-ES. (pos_init = {}, pos_target = {})'.format(pos_init, pos_target)
+      
+      if self._run_cma_throw_farther_pos_CONSTRAIN_ACTION == 'check':
+        is_action_checked = self._check_action(pos_init, pos_target, duration)
+        entry = None
+        if is_action_checked and pos_init != pos_target:
+          entry = self._launch_test(dataset, pos_init, pos_target, duration, prefix=prefix)
+        loss = 1 if entry is None else -float(entry['result']['loc_land'])
+        print prefix_info, 'loss = {}'.format(loss)
+        
+      elif self._run_cma_throw_farther_pos_CONSTRAIN_ACTION == 'correct':
+        pos_init, pos_target, duration = self._correct_action(pos_init, pos_target, duration)
+        entry = None
+        if pos_init != pos_target:
+          entry = self._launch_test(dataset, pos_init, pos_target, duration, prefix=prefix)
+        loss = 1 if entry is None else -float(entry['result']['loc_land'])
+        print prefix_info, 'loss = {}'.format(loss)
+      
+      elif self._run_cma_throw_farther_pos_CONSTRAIN_ACTION == 'penalize':
+        pos_init, pos_target, duration, penalty = self._penalize_action(pos_init, pos_target, duration)
+        entry = self._launch_test(dataset, pos_init, pos_target, duration, prefix=prefix)
+        loss_raw = 1 if entry is None else -float(entry['result']['loc_land'])
+        loss = loss_raw + penalty
+        print prefix_info, 'loss = {}, penalty = {}'.format(loss, penalty)
+      
+      print ''
+      
+      return loss
+    
+    res = cma.fmin(f, self._run_cma_throw_farther_pos_INIT_GUESS, self._run_cma_throw_farther_pos_INIT_VAR, 
+                   popsize=20, tolx=0.001, verb_disp=False, verb_log=0)
+    print prefix_info, 'result =', res
+    print prefix_info, 'optimal solution found. (pos_init = {}, pos_target = {}, duration === {})'.format(res[0][0], res[0][1], self._run_cma_throw_farther_pos_DURATION)
   
   def _run_same_throw(self):
     prefix = 'catapult_sim/same_throw'
@@ -266,6 +323,7 @@ class TCatapultLPLinearSim(object):
     operation_dict = {
       'data_collection': self._run_data_collection,
       'cma_throw_farther': self._run_cma_throw_farther,
+      'cma_throw_farther_pos': self._run_cma_throw_farther_pos,
       'check_dataset': self._run_check_dataset,
       'same_throw': self._run_same_throw
     }
