@@ -1,7 +1,7 @@
-#!/usr/bin/python
+#!/usr/local/bin/python3
 
 """
-The catapult dataset library.
+The catapult dataset library. (for Python 3)
 """
 
 __author__    = 'David Qiu'

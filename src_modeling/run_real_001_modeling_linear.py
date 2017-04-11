@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/local/bin/python3
 
 """
 Catapult linear motion modeling.
@@ -10,8 +10,9 @@ __website__   = 'www.davidqiu.com'
 __copyright__ = 'Copyright (C) 2017, David Qiu. All rights reserved.'
 
 
-from CatapultDataset import *
+from libCatapultDataset import TCatapultDataset
 
+import os
 import time
 import datetime
 import yaml
