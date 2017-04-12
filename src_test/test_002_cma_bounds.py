@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 """
-CMA-ES boundaries constraints handling testing.
+CMA-ES constraints handling by built-in bounds handler testing.
 """
 
 __author__    = 'David Qiu'
@@ -39,10 +39,6 @@ if __name__ == '__main__':
     elif sample_x > 5.0: loss = - (5.0)
     else:                loss = - sample_x
     
-    # panelty
-    if   sample_x < 0.0: loss += np.abs(sample_x - 0.0) * 10.
-    elif sample_x > 5.0: loss += np.abs(sample_x - 5.0) * 10.
-    
     entry = {
       't': args['count_iter'],
       'x': sample_x,
@@ -50,14 +46,16 @@ if __name__ == '__main__':
     }
     args['dataset'].append(entry)
     
-    print args['count_iter'], sample_x, loss
+    print(args['count_iter'], sample_x, loss)
     
     args['count_iter'] += 1
     
     return loss
   
-  res = cma.fmin(f, args['init_guess'], args['sigma'], [args], tolx=0.01, popsize=args['popsize'], verb_disp=False, verb_log=0)
-  print res
+  res = cma.fmin(f, args['init_guess'], args['sigma'], [args], 
+                 bounds=[[0.0, 0.0, 0.0], [5.0, 5.0, 5.0]], 
+                 tolx=0.01, popsize=args['popsize'], verb_disp=False, verb_log=0)
+  print(res)
   
   args['solution'] = res[0].tolist()
   
