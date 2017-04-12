@@ -10,8 +10,6 @@ __website__   = 'www.davidqiu.com'
 __copyright__ = 'Copyright (C) 2017, David Qiu. All rights reserved.'
 
 
-from libCatapultDataset import TCatapultDataset
-
 import os
 import time
 import datetime
@@ -27,6 +25,9 @@ from keras.layers import Dense, Dropout, Activation
 from keras.optimizers import RMSprop, SGD
 
 import pdb
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '../src/'))
+from libCatapultDataset import TCatapultDataset
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/cma'))
 import cma

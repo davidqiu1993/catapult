@@ -107,7 +107,7 @@ class TCatapultDataset(object):
     
     for dataset_filepath in dataset_filepaths:
       if self._verbose:
-        print self._prefix_info, 'load data from file (path={})'.format(dataset_filepath)
+        print(self._prefix_info, 'load data from file (path={})'.format(dataset_filepath))
       with open(dataset_filepath, 'r') as cur_yaml_file:
         cur_dataset = yaml.load(cur_yaml_file)
         if cur_dataset is not None:
@@ -194,7 +194,7 @@ class TCatapultDataset(object):
     
     yaml.dump([self._dataset_append[-1]], self._dataset_append_yaml_file, default_flow_style=False)
     if self._verbose:
-      print self._prefix_info, 'new entry added to dataset.'
+      print(self._prefix_info, 'new entry added to dataset.')
   
   def fetch(self, entry_index):
     """

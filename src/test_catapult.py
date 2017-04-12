@@ -21,7 +21,7 @@ if __name__ == '__main__':
   if len(sys.argv) == 2:
     pos_base = int(sys.argv[1])
   
-  print 'Initialize a catapult controller.'
+  print('Initialize a catapult controller.')
   if pos_base is None:
     catapult = TCatapult()
   else:
@@ -30,34 +30,34 @@ if __name__ == '__main__':
   time.sleep(0.5)
   
   assert(catapult.position == catapult.getPosition())
-  print 'Actual initial position:', catapult.position
+  print('Actual initial position:', catapult.position)
   
   time.sleep(0.5)
   
-  print 'Move to middle position.'
+  print('Move to middle position.')
   pos = catapult.move(catapult.POS_MID)
-  print 'Current actual position:', catapult.position
+  print('Current actual position:', catapult.position)
   
   time.sleep(0.5)
   
-  print 'Move to minimum position.'
+  print('Move to minimum position.')
   catapult.move(catapult.POS_MIN)
-  print 'Current actual position:', catapult.position
+  print('Current actual position:', catapult.position)
   
   time.sleep(0.5)
   
-  print 'Move to maximum position.'
+  print('Move to maximum position.')
   catapult.move(catapult.POS_MAX)
-  print 'Current actual position:', catapult.position
+  print('Current actual position:', catapult.position)
   
   time.sleep(0.5)
   
-  print 'Move to initial position.'
+  print('Move to initial position.')
   catapult.move(catapult.POS_INIT)
-  print 'Current actual position:', catapult.position
+  print('Current actual position:', catapult.position)
   
   time.sleep(0.5)
   
-  print 'Catapult controller testing finished.'
+  print('Catapult controller testing finished.')
 
 

@@ -79,7 +79,7 @@ def getOptions():
 
 if __name__ == '__main__':
   if len(sys.argv) != 3 and len(sys.argv) != 2:
-    print 'usage: plot_sim_optimization.py <datafile> <option>'
+    print('usage: plot_sim_optimization.py <datafile> <option>')
     quit()
   
   option = 'loc_land'
@@ -102,7 +102,7 @@ if __name__ == '__main__':
   # Dataset check
   n_samples = len(dataset)
   assert(n_samples > 1)
-  print prefix_info, 'episodes =', n_samples
+  print(prefix_info, 'episodes =', n_samples)
   
   # Execute option
   option_func(dataset, prefix_info)

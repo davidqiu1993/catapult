@@ -20,7 +20,7 @@ import pdb
 
 if __name__ == '__main__':
   if len(sys.argv) != 2:
-    print 'usage: plot_consistency.py datafile'
+    print('usage: plot_consistency.py datafile')
     quit()
   
   filepath = sys.argv[1]
@@ -45,10 +45,10 @@ if __name__ == '__main__':
         assert(entry['action']['pos_init'] == check_pos_init)
         assert(entry['action']['pos_target'] == check_pos_target)
     n_samples = len(dataset)
-    print prefix_info, 'samples =', n_samples
-    print prefix_info, 'face_init =', check_face_init
-    print prefix_info, 'pos_init =', check_pos_init
-    print prefix_info, 'pos_target =', check_pos_target
+    print(prefix_info, 'samples =', n_samples)
+    print(prefix_info, 'face_init =', check_face_init)
+    print(prefix_info, 'pos_init =', check_pos_init)
+    print(prefix_info, 'pos_target =', check_pos_target)
     
     # Configurations
     plt.figure(num=1, figsize=(6, 8), dpi=120, facecolor='w', edgecolor='k')

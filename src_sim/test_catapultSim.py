@@ -19,7 +19,7 @@ import time
 
 if __name__ == '__main__':
   if len(sys.argv) != 2:
-    print 'Usage: ./test_catapultSim.py <dirpath_sim>'
+    print('Usage: ./test_catapultSim.py <dirpath_sim>')
     quit()
 
   dirpath_sim = sys.argv[1]
@@ -27,16 +27,16 @@ if __name__ == '__main__':
   prefix = 'test_catapultSim'
   prefix_info = prefix + ':'
 
-  print prefix_info, 'dirpath_sim =', os.path.abspath(dirpath_sim)
+  print(prefix_info, 'dirpath_sim =', os.path.abspath(dirpath_sim))
 
-  print prefix_info, 'Initialize a simulation catapult controller.'
+  print(prefix_info, 'Initialize a simulation catapult controller.')
   catapult = TCatapultSim(dirpath_sim)
   
-  print prefix_info, 'Throw with linear motion. (please manage msg files manually or with simulator)'
+  print(prefix_info, 'Throw with linear motion. (please manage msg files manually or with simulator)')
   loc_land = catapult.throw_linear(catapult.POS_MIN, catapult.POS_MID, 0.1)
 
-  print prefix_info, 'loc_land =', loc_land
+  print(prefix_info, 'loc_land =', loc_land)
 
-  print prefix_info, 'Simulation catapult controller testing finished.'
+  print(prefix_info, 'Simulation catapult controller testing finished.')
 
 
