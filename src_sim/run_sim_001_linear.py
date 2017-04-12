@@ -61,9 +61,9 @@ class TCatapultLPLinearSim(object):
     dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data)
     
     feature_dict = {
-      'pos_init': np.array([0.1, 0.2, 0.3, 0.4]) * math.pi,
-      'pos_target': np.array([0.5, 0.6, 0.7, 0.8, 0.9]) * math.pi,
-      'duration': [0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5]
+      'pos_init': np.array([(0.0 + i*0.05) for i in range(11)]) * math.pi,
+      'pos_target': np.array([(0.0 + i*0.05) for i in range(16)]) * math.pi,
+      'duration': [(0.05 + i*0.025) for i in range(23)]
     }
     
     feature_space = []
@@ -79,6 +79,12 @@ class TCatapultLPLinearSim(object):
             new_feature_space_i[feature] = feature_i
             new_feature_space.append(new_feature_space_i)
         feature_space = new_feature_space
+    
+    feature_space_selected = []
+    for feature_comb in feature_space:
+      if feature_comb['pos_init'] < feature_comb['pos_target']:
+        feature_space_selected.append(feature_comb)
+    feature_space = feature_space_selected
     
     n_samples = 1
     count_feature = 0
@@ -374,8 +380,8 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/same_throw'
     prefix_info = prefix + ':'
     
-    pos_init   = 0.10 * math.pi
-    pos_target = 0.60 * math.pi
+    pos_init   = 0.0 * math.pi
+    pos_target = 0.6 * math.pi
     duration   = 0.10
     
     print prefix_info, 'pos_init = {}, pos_target = {}, duration = {}'.format(pos_init, pos_target, duration)
