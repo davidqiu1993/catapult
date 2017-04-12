@@ -40,6 +40,12 @@ class TCatapultModelLinearSim(object):
   def __init__(self, abs_dirpath_model, abs_dirpath_data=None):
     super(TCatapultModelLinearSim, self).__init__()
 
+    self._POS_MIN = 0.00 * math.pi
+    self._POS_MID = 0.50 * math.pi
+    self._POS_MAX = 0.75 * math.pi
+    self._DURATION_MIN = 0.05
+    self._DURATION_MAX = 0.60
+
     self._dirpath_model = abs_dirpath_model
 
     self._dataset = []
@@ -256,11 +262,11 @@ class TCatapultModelLinearSim(object):
     prefix = 'penalize_action'
     prefix_info = prefix + ':'
     
-    POS_MIN = 0.00 * math.pi
-    POS_MID = 0.50 * math.pi
-    POS_MAX = 0.75 * math.pi
-    DURATION_MIN = 0.05
-    DURATION_MAX = 0.60
+    POS_MIN = self._POS_MIN
+    POS_MID = self._POS_MID
+    POS_MAX = self._POS_MAX
+    DURATION_MIN = self._DURATION_MIN
+    DURATION_MAX = self._DURATION_MAX
 
     corrected_pos_init   = pos_init
     corrected_pos_target = pos_target
@@ -306,7 +312,7 @@ class TCatapultModelLinearSim(object):
     
     return corrected_pos_init, corrected_pos_target, corrected_duration, penalty
 
-  def _optimize_cma_throw_farther(self):
+  def _optimize_cma_throw_farther_penalty(self):
     args = {
       'count_iter': 0
     }
@@ -343,7 +349,53 @@ class TCatapultModelLinearSim(object):
 
     return optimal_action
 
-  def _optimize_cma_ctrl_loc_land(self, target_loc_land=30.0):
+  def _optimize_cma_throw_farther_bounds(self):
+    args = {
+      'count_iter': 0
+    }
+
+    def f(x, args):
+      print('CMA-ES iteration. (iteration = {})'.format(args['count_iter']))
+      args['count_iter'] += 1
+
+      pos_init, pos_target, duration = x
+      print('CMA-ES sample. (pos_init = {}, pos_target = {}, duration = {})'.format(pos_init, pos_target, duration))
+      print('Test sample. (pos_init = {}, pos_target = {}, duration = {})'.format(pos_init, pos_target, duration))
+
+      predictions = self._model.predict([[pos_init, pos_target, duration], [pos_init, pos_target, duration]])
+      y_predict = predictions[0]
+      loc_land_predict = y_predict[0]
+
+      loss = - loc_land_predict
+      print('loss = {}, loc_land_predict = {}'.format(np.round(loss, 2), np.round(loc_land_predict, 2)))
+      print('')
+
+      return loss
+
+    res = cma.fmin(f, [0.1 * math.pi, 0.6 * math.pi, 0.3], 0.5, [args], 
+                   bounds=[[self._POS_MIN, self._POS_MIN, self._DURATION_MIN], 
+                           [self._POS_MID, self._POS_MAX, self._DURATION_MAX]], 
+                   popsize=20, tolx=0.001, verb_disp=False, verb_log=0)
+
+    op_pos_init, op_pos_target, op_duration, op_penalty = self._penalize_action(res[0][0], res[0][1], res[0][2])
+    optimal_action = {
+      'pos_init':   op_pos_init,
+      'pos_target': op_pos_target,
+      'duration':   op_duration,
+      'penalty':    op_penalty
+    }
+
+    return optimal_action
+
+  def _optimize_cma_throw_farther(self, action_constraints='bounds'):
+    if action_constraints == 'penalty':
+      return self._optimize_cma_throw_farther_penalty()
+    elif action_constraints == 'bounds':
+      return self._optimize_cma_throw_farther_bounds()
+    else:
+      raise ValueError('Invalid action constraints.')
+
+  def _optimize_cma_ctrl_loc_land_penalty(self, target_loc_land=30.0):
     args = {
       'count_iter': 0
     }
@@ -380,6 +432,52 @@ class TCatapultModelLinearSim(object):
 
     return optimal_action
 
+  def _optimize_cma_ctrl_loc_land_bounds(self, target_loc_land=30.0):
+    args = {
+      'count_iter': 0
+    }
+
+    def f(x, args):
+      print('CMA-ES iteration. (iteration = {}, target_loc_land = {})'.format(args['count_iter'], target_loc_land))
+      args['count_iter'] += 1
+
+      pos_init, pos_target, duration = x
+      print('CMA-ES sample. (pos_init = {}, pos_target = {}, duration = {})'.format(pos_init, pos_target, duration))
+      print('Test sample. (pos_init = {}, pos_target = {}, duration = {})'.format(pos_init, pos_target, duration))
+
+      predictions = self._model.predict([[pos_init, pos_target, duration], [pos_init, pos_target, duration]])
+      y_predict = predictions[0]
+      loc_land_predict = y_predict[0]
+
+      loss = np.abs(target_loc_land - loc_land_predict)
+      print('loss = {}, loc_land_predict = {}'.format(np.round(loss, 2), np.round(loc_land_predict, 2)))
+      print('')
+
+      return loss
+
+    res = cma.fmin(f, [0.1 * math.pi, 0.6 * math.pi, 0.3], 0.5, [args], 
+                   bounds=[[self._POS_MIN, self._POS_MIN, self._DURATION_MIN], 
+                           [self._POS_MID, self._POS_MAX, self._DURATION_MAX]], 
+                   popsize=20, tolx=0.001, verb_disp=False, verb_log=0)
+
+    op_pos_init, op_pos_target, op_duration, op_penalty = self._penalize_action(res[0][0], res[0][1], res[0][2])
+    optimal_action = {
+      'pos_init':   op_pos_init,
+      'pos_target': op_pos_target,
+      'duration':   op_duration,
+      'penalty':    op_penalty
+    }
+
+    return optimal_action
+
+  def _optimize_cma_ctrl_loc_land(self, target_loc_land=30.0, action_constraints='bounds'):
+    if action_constraints == 'penalty':
+      return self._optimize_cma_ctrl_loc_land_penalty(target_loc_land=target_loc_land)
+    elif action_constraints == 'bounds':
+      return self._optimize_cma_ctrl_loc_land_bounds(target_loc_land=target_loc_land)
+    else:
+      raise ValueError('Invalid action constraints.')
+
   def run(self):
     argc = len(sys.argv)
     assert(argc == 1 or argc == 2)
@@ -408,10 +506,10 @@ class TCatapultModelLinearSim(object):
       elif option == '2':
         self._plot_prediction_errors_pos(self._dataset, duration=0.05)
       elif option == '3':
-        res = self._optimize_cma_throw_farther()
+        res = self._optimize_cma_throw_farther(action_constraints='bounds')
         print(res)
       elif option == '4':
-        res = self._optimize_cma_ctrl_loc_land(target_loc_land=30.0)
+        res = self._optimize_cma_ctrl_loc_land(target_loc_land=30.0, action_constraints='bounds')
         print(res)
       else: # (q)
         print('Exit the program.')
