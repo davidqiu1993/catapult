@@ -88,10 +88,10 @@ class DeltaDNNTest(object):
     
     options = {
       #'AdaDelta_rho':         0.5, # 0.5, 0.9
-      #'dropout':              True,
-      #'dropout_ratio':        0.01,
+      'dropout':              True,
+      'dropout_ratio':        0.01,
       'loss_stddev_stop':     1.0e-4,
-      'loss_stddev_stop_err': 1.0e-4,
+      'loss_stddev_stop_err': 1.0e-6,
       #'batchsize':            5, # 5, 10
       #'num_check_stop':       50,
       #'loss_maf_alpha':       0.4,
@@ -286,7 +286,7 @@ if __name__ == '__main__':
                         plot=True)
   
   if True:
-    ave_stderr_y, ave_stderr_err = tester.test_same_dim('step', [[-3.0, 5.0]], noise=[0.2], max_updates=1000)
+    ave_stderr_y, ave_stderr_err = tester.test_same_dim('step', [[-3.0, 5.0]], noise=[0.2], max_updates=10000)
     print 'ave_stderr_y =', ave_stderr_y
     print 'ave_stderr_err =', ave_stderr_err
   
