@@ -54,8 +54,8 @@ class TCatapultModelLinearSim(object):
     self._dirpath_data = loader_dataset._dataset_dirpath
     loader_dataset.load_dataset()
     for entry in loader_dataset:
-      if entry['motion'] == 'linear':
-      #if entry['motion'] == 'linear' and np.round(entry['action']['duration'], 2) == 0.05:
+      #if entry['motion'] == 'linear':
+      if entry['motion'] == 'linear' and entry['action']['duration'] == 0.05:
         self._dataset.append(entry)
 
     self._model = self._create_model()
