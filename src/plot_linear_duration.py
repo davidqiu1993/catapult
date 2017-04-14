@@ -45,10 +45,10 @@ if __name__ == '__main__':
         assert(entry['action']['pos_init'] == check_pos_init)
         assert(entry['action']['pos_target'] == check_pos_target)
     n_samples = len(dataset)
-    print(prefix_info, 'samples =', n_samples)
-    print(prefix_info, 'face_init =', check_face_init)
-    print(prefix_info, 'pos_init =', check_pos_init)
-    print(prefix_info, 'pos_target =', check_pos_target)
+    print('{} samples = {}'.format(prefix_info, n_samples))
+    print('{} face_init = {}'.format(prefix_info, check_face_init))
+    print('{} pos_init = {}'.format(prefix_info, check_pos_init))
+    print('{} pos_target = {}'.format(prefix_info, check_pos_target))
     
     # Configurations
     plt.figure(num=1, figsize=(6, 8), dpi=120, facecolor='w', edgecolor='k')

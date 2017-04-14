@@ -50,7 +50,7 @@ if __name__ == '__main__':
     }
     args['dataset'].append(entry)
     
-    print(args['count_iter'], sample_x, loss)
+    print('{} {} {}'.format(args['count_iter'], sample_x, loss))
     
     args['count_iter'] += 1
     

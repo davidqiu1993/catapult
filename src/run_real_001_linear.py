@@ -62,10 +62,10 @@ class TCatapultLPLinear(object):
     
     captured = False
     while not captured:
-      print(prefix_info, 'face_init = {}, pos_init = {}, pos_target = {}, duration = {}'.format(face_init, pos_init, pos_target, duration))
+      print('{} face_init = {}, pos_init = {}, pos_target = {}, duration = {}'.format(prefix_info, face_init, pos_init, pos_target, duration))
       input_ready = raw_input(prefix_info + ' ready (Y)?> ')
       pos_init_actual, pos_target_actual = self.throw(pos_init, pos_target, duration)
-      print(prefix_info, 'pos_init_actual = {}, pos_target_actual = {}'.format(pos_init_actual, pos_target_actual))
+      print('{} pos_init_actual = {}, pos_target_actual = {}'.format(prefix_info, pos_init_actual, pos_target_actual))
       
       input_captured = raw_input(prefix_info + ' captured (Y/n)?> ')
       if input_captured == '' or input_captured == 'y' or input_captured == 'Y':
@@ -82,7 +82,7 @@ class TCatapultLPLinear(object):
           thrown = False
         
         if not thrown:
-          print(prefix_info, 'not thrown.')
+          print('{} not thrown.'.format(prefix_info))
           return None
       
       if captured:
@@ -149,11 +149,11 @@ class TCatapultLPLinear(object):
     for feature_comb in feature_space:
       count_feature += 1
       for i in range(n_samples):
-        print(prefix_info, 'samples: {}/{}, feature: {}/{}'.format(i+1, n_samples, count_feature, len(feature_space)))
+        print('{} samples: {}/{}, feature: {}/{}'.format(prefix_info, i+1, n_samples, count_feature, len(feature_space)))
         self._launch_test(dataset, feature_comb['face_init'], feature_comb['pos_init'], feature_comb['pos_target'], feature_comb['duration'], prefix=prefix)
         print('')
     
-    print('datafile:', dataset.append_filepath)
+    print('{} datafile: {}'.format(prefix_info, dataset.append_filepath))
   
   def _check_action(self, pos_init, pos_target, duration):
     if pos_init < self.catapult.POS_MIN: return False
@@ -190,34 +190,34 @@ class TCatapultLPLinear(object):
     if pos_init < self.catapult.POS_MIN:
       cur_penalty = np.abs(pos_init - self.catapult.POS_MIN) * penalty_factor
       penalty += cur_penalty
-      print(prefix_info, 'penalty = {} ({})'.format(cur_penalty, 'pos_init < self.catapult.POS_MIN'))
+      print('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'pos_init < self.catapult.POS_MIN'))
       corrected_pos_init = self.catapult.POS_MIN
     if pos_init > self.catapult.POS_MID:
       cur_penalty = np.abs(pos_init - self.catapult.POS_MID) * penalty_factor
       penalty += cur_penalty
-      print(prefix_info, 'penalty = {} ({})'.format(cur_penalty, 'pos_init > self.catapult.POS_MID'))
+      print('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'pos_init > self.catapult.POS_MID'))
       corrected_pos_init = self.catapult.POS_MID
     
     if pos_target <= (corrected_pos_init + min_pos_diff):
       cur_penalty = np.abs(pos_target - (corrected_pos_init + min_pos_diff)) * penalty_factor
       penalty += cur_penalty
-      print(prefix_info, 'penalty = {} ({})'.format(cur_penalty, 'pos_target <= (corrected_pos_init + min_pos_diff)'))
+      print('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'pos_target <= (corrected_pos_init + min_pos_diff)'))
       corrected_pos_target = (corrected_pos_init + min_pos_diff)
     if pos_target > self.catapult.POS_MAX:
       cur_penalty = np.abs(pos_target - self.catapult.POS_MAX) * penalty_factor
       penalty += cur_penalty
-      print(prefix_info, 'penalty = {} ({})'.format(cur_penalty, 'pos_target > self.catapult.POS_MAX'))
+      print('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'pos_target > self.catapult.POS_MAX'))
       corrected_pos_target = self.catapult.POS_MAX
     
     if duration < 0.01:
       cur_penalty = np.abs(duration - 0.01) * 1000 * penalty_factor
       penalty += cur_penalty
-      print(prefix_info, 'penalty = {} ({})'.format(cur_penalty, 'duration < 0.01'))
+      print('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'duration < 0.01'))
       corrected_duration = 0.01
     if duration > 0.6:
       cur_penalty = np.abs(duration - 0.6) * 1000 * penalty_factor
       penalty += cur_penalty
-      print(prefix_info, 'penalty = {} ({})'.format(cur_penalty, 'duration > 0.6'))
+      print('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'duration > 0.6'))
       corrected_duration = 0.6
     
     return corrected_pos_init, corrected_pos_target, corrected_duration, penalty
@@ -239,11 +239,11 @@ class TCatapultLPLinear(object):
     
     def f(x):
       self._run_cma_throw_farther_count_test += 1
-      print(prefix_info, 'optimizes with CMA-ES. (test = {})'.format(self._run_cma_throw_farther_count_test))
+      print('{} optimizes with CMA-ES. (test = {})'.format(prefix_info, self._run_cma_throw_farther_count_test))
       
       pos_init, pos_target, duration_scaled = x
       duration = np.round(duration_scaled / 1000., 2)
-      print(prefix_info, 'sample from CMA-ES. (pos_init = {}, pos_target = {}, duration = {} ({}))'.format(pos_init, pos_target, duration, duration_scaled))
+      print('{} sample from CMA-ES. (pos_init = {}, pos_target = {}, duration = {} ({}))'.format(prefix_info, pos_init, pos_target, duration, duration_scaled))
       
       if self._run_cma_throw_farther_CONSTRAIN_ACTION == 'check':
         is_action_checked = self._check_action(pos_init, pos_target, duration)
@@ -251,7 +251,7 @@ class TCatapultLPLinear(object):
         if is_action_checked and pos_init != pos_target:
           entry = self._launch_test(dataset, '1', int(pos_init), int(pos_target), float(duration), check_thrown=True, prefix=prefix)
         loss = 0 if entry is None else -float(entry['result']['loc_land'])
-        print(prefix_info, 'loss = {}'.format(loss))
+        print('{} loss = {}'.format(prefix_info, loss))
         
       elif self._run_cma_throw_farther_CONSTRAIN_ACTION == 'correct':
         pos_init, pos_target, duration = self._correct_action(pos_init, pos_target, duration)
@@ -259,22 +259,22 @@ class TCatapultLPLinear(object):
         if pos_init != pos_target:
           entry = self._launch_test(dataset, '1', int(pos_init), int(pos_target), float(duration), check_thrown=True, prefix=prefix)
         loss = 0 if entry is None else -float(entry['result']['loc_land'])
-        print(prefix_info, 'loss = {}'.format(loss))
+        print('{} loss = {}'.format(prefix_info, loss))
       
       elif self._run_cma_throw_farther_CONSTRAIN_ACTION == 'penalize':
         pos_init, pos_target, duration, penalty = self._penalize_action(pos_init, pos_target, duration)
         entry = self._launch_test(dataset, '1', int(pos_init), int(pos_target), float(duration), check_thrown=True, prefix=prefix)
         loss_raw = 0 if entry is None else -float(entry['result']['loc_land'])
         loss = loss_raw + penalty
-        print(prefix_info, 'loss = {}, penalty = {}'.format(loss, penalty))
+        print('{} loss = {}, penalty = {}'.format(prefix_info, loss, penalty))
       
       print('')
       
       return loss
     
     res = cma.fmin(f, self._run_cma_throw_farther_INIT_GUESS, self._run_cma_throw_farther_INIT_VAR, popsize=10, tolx=5.0, verb_disp=False, verb_log=0)
-    print(prefix_info, 'result =', res)
-    print(prefix_info, 'optimal solution found. (pos_init = {}, pos_target = {}, duration = {} ({}))'.format(res[0][0], res[0][1], round(res[0][2] / 1000., 2), res[0][2]))
+    print('{} result = {}'.format(prefix_info, res))
+    print('{} ptimal solution found. (pos_init = {}, pos_target = {}, duration = {} ({}))'.format(prefix_info, res[0][0], res[0][1], round(res[0][2] / 1000., 2), res[0][2]))
   
   def _run_same_throw(self):
     prefix = 'catapult/same_throw'
@@ -284,12 +284,12 @@ class TCatapultLPLinear(object):
     pos_init = 200
     pos_target = 400
     duration = 0.01
-    print(prefix_info, 'face_init = {}, pos_init = {}, pos_target = {}, duration = {}'.format(face_init, pos_init, pos_target, duration))
+    print('{} face_init = {}, pos_init = {}, pos_target = {}, duration = {}'.format(prefix_info, face_init, pos_init, pos_target, duration))
     
     input_ready = raw_input(prefix_info + ' ready (Y)?> ')
     pos_init_actual, pos_target_actual = self.throw(pos_init, pos_target, duration)
-    print(prefix_info, 'pos_init_actual = {}, pos_target_actual = {}'.format(pos_init_actual, pos_target_actual))
-    print(prefix_info, 'expected_land_loc = ~{}'.format(1200))
+    print('{} pos_init_actual = {}, pos_target_actual = {}'.format(prefix_info, pos_init_actual, pos_target_actual))
+    print('{} expected_land_loc = ~{}'.format(prefix_info, 1200))
   
   def _run_check_dataset(self):
     prefix = 'catapult/check_dataset'
@@ -335,19 +335,19 @@ class TCatapultLPLinear(object):
       
       if is_invalid:
         count_invalid_entries += 1
-        print(prefix_info, 'invalid entry found >>> ')
+        print('{} invalid entry found >>> '.format(prefix_info))
         print(entry)
         print('')
       
       elif is_suspicious:
         count_suspicious_entries += 1
-        print(prefix_info, 'suspicious entry found >>> ')
+        print('{} suspicious entry found >>> '.format(prefix_info))
         print(entry)
         print('')
     
-    print(prefix_info, 'entries    = {}'.format(dataset.size))
-    print(prefix_info, 'suspicious = {}/{}'.format(count_suspicious_entries, dataset.size))
-    print(prefix_info, 'invalid    = {}/{}'.format(count_invalid_entries, dataset.size))
+    print('{} entries    = {}'.format(prefix_info, dataset.size))
+    print('{} suspicious = {}/{}'.format(prefix_info, count_suspicious_entries, dataset.size))
+    print('{} invalid    = {}/{}'.format(prefix_info, count_invalid_entries, dataset.size))
   
   def getOperations(self):
     operation_dict = {

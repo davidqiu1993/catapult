@@ -30,31 +30,31 @@ if __name__ == '__main__':
   time.sleep(0.5)
   
   assert(catapult.position == catapult.getPosition())
-  print('Actual initial position:', catapult.position)
+  print('Actual initial position: {}'.format(catapult.position))
   
   time.sleep(0.5)
   
   print('Move to middle position.')
   pos = catapult.move(catapult.POS_MID)
-  print('Current actual position:', catapult.position)
+  print('Current actual position: {}'.format(catapult.position))
   
   time.sleep(0.5)
   
   print('Move to minimum position.')
   catapult.move(catapult.POS_MIN)
-  print('Current actual position:', catapult.position)
+  print('Current actual position: {}'.format(catapult.position))
   
   time.sleep(0.5)
   
   print('Move to maximum position.')
   catapult.move(catapult.POS_MAX)
-  print('Current actual position:', catapult.position)
+  print('Current actual position: {}'.format(catapult.position))
   
   time.sleep(0.5)
   
   print('Move to initial position.')
   catapult.move(catapult.POS_INIT)
-  print('Current actual position:', catapult.position)
+  print('Current actual position: {}'.format(catapult.position))
   
   time.sleep(0.5)
   

@@ -27,16 +27,16 @@ if __name__ == '__main__':
   prefix = 'test_catapultSim'
   prefix_info = prefix + ':'
 
-  print(prefix_info, 'dirpath_sim =', os.path.abspath(dirpath_sim))
+  print('{} dirpath_sim = {}'.format(prefix_info, os.path.abspath(dirpath_sim)))
 
-  print(prefix_info, 'Initialize a simulation catapult controller.')
+  print('{} Initialize a simulation catapult controller.'.format(prefix_info))
   catapult = TCatapultSim(dirpath_sim)
   
-  print(prefix_info, 'Throw with linear motion. (please manage msg files manually or with simulator)')
+  print('{} Throw with linear motion. (please manage msg files manually or with simulator)'.format(prefix_info))
   loc_land = catapult.throw_linear(catapult.POS_MIN, catapult.POS_MID, 0.1)
 
-  print(prefix_info, 'loc_land =', loc_land)
+  print('{} loc_land = {}'.format(prefix_info, loc_land))
 
-  print(prefix_info, 'Simulation catapult controller testing finished.')
+  print('{} Simulation catapult controller testing finished.'.format(prefix_info))
 
 

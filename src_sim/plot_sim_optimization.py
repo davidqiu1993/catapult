@@ -102,7 +102,7 @@ if __name__ == '__main__':
   # Dataset check
   n_samples = len(dataset)
   assert(n_samples > 1)
-  print(prefix_info, 'episodes =', n_samples)
+  print('{} episodes = {}'.format(prefix_info, n_samples))
   
   # Execute option
   option_func(dataset, prefix_info)

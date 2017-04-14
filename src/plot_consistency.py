@@ -42,10 +42,10 @@ if __name__ == '__main__':
           if '_actual' not in k:
             assert(check_action[k] == entry['action'][k])
     n_samples = len(dataset)
-    print(prefix_info, 'samples =', n_samples)
+    print('{} samples = {}'.format(prefix_info, n_samples))
     for k in check_action:
       if '_actual' not in k:
-        print(prefix_info, '{} = {}'.format(k, check_action[k]))
+        print('{} {} = {}'.format(prefix_info, k, check_action[k]))
     
     # Configurations
     LOC_MIN = 0
