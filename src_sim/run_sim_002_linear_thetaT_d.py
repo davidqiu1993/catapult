@@ -247,14 +247,69 @@ class TCatapultLPLinearSim(object):
     print('{} result = {}'.format(prefix_info, res))
     print('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
     optimal_pos_target = res[0][0]
+    print('')
     
-    # Test with ground-truth dynamics
-    print('{} test with ground-truth dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
+    # Test in true dynamics
+    print('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
     loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
     print('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
 
   def _run_model_free(self):
-    pass
+    prefix = 'catapult/model_free'
+    prefix_info = prefix + ':'
+
+    # define policy function with parameters
+    def policy_func(desired_loc_land, params):
+      x = desired_loc_land
+      p = params
+      y = 0
+      for i in range(4):
+        y += p[i] * x**i
+      return y
+
+    # specify desired landing location sample points
+    N = 11
+    desired_loc_land_samples = [(0 + 2.5*i) for i in range(N)]
+
+    # define loss function
+    self._run_model_free_iteration = 0
+    def loss_func(params, desired_loc_land_samples, N):
+      print('{} optimize policy parameters with CMA-ES. (iteration = {}, N = {})'.format(prefix_info, self._run_model_free_iteration, N))
+      self._run_model_free_iteration += 1
+      print('{} sample from CMA-ES. (params = {})'.format(prefix_info, params))
+      pos_target_hypos = [policy_func(desired_loc_land_samples[i]) for i in range(N)]
+      print('{} generate hypo target positions. (hypos = {})'.format(prefix_info, pos_target_hypos))
+      loss = 0
+      for i in range(N):
+        loc_land_i = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_hypos[i], self._FIXED_DURATION)
+        loss += (desired_loc_land_samples[i] - loc_land_i)**2
+      loss = loss / (2 * N)
+      print('{} loss = {}'.format(prefix_info, loss))
+      print('')
+      return loss
+
+    # optimize policy parameters with CMA-ES
+    init_guess = [0.0, 0.53156, -0.02821, 0.00038] # for duration = 0.10, pos_init = 0.0
+    init_var   = 0.00100
+    res = cma.fmin(loss_func, init_guess, init_var, args=(desired_loc_land_samples, N), 
+                   popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
+    optimal_params = res[0]
+    print('{} result = {}'.format(prefix_info, res))
+    print('{} optimal solution found. (params = {})'.format(prefix_info, optimal_params))
+    print('')
+
+    # Query desired landing location
+    desired_loc_land_input = input('{} desired_loc_land = '.format(prefix_info)).strip().lower()
+    desired_loc_land = float(desired_loc_land_input)
+
+    # test policy parameters in true dynamics
+    print('{} apply optimal policy parameters. (params = {})'.format(prefix_info, optimal_params))
+    pos_target_hypo = policy_func(desired_loc_land, optimal_params)
+    print('{} predict action by parameterized policy. (desired_loc_land = {}, pos_target_hypo = {})'.format(prefix_info, desired_loc_land, pos_target_hypo))
+    print('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION))
+    loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
+    print('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+
 
   def _run_hybrid(self):
     pass
