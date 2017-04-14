@@ -192,13 +192,14 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult/model_based'
     prefix_info = prefix + ':'
     
+    # Create model (and load trained weights)
     should_load_model = False
-    should_load_model_input = input('load model without training (y/N)?> ').strip().lower()
+    should_load_model_input = input('{} load model without training (y/N)?> '.format(prefix_info)).strip().lower()
     if should_load_model_input in ['y']:
       should_load_model = True
-    
     model = self._create_model(1, 1, hiddens=[128, 128], max_updates=10000, should_load_model=should_load_model, prefix_info=prefix_info)
     
+    # Train model
     x_train = []
     y_train = []
     for entry in self._dataset:
@@ -206,16 +207,51 @@ class TCatapultLPLinearSim(object):
       y_train.append([entry['result']['loc_land']])
     if not should_load_model:
       self._train_model(model, x_train, y_train, batch_train=True)
-      
-    should_estimate_model_quality_input = input('estimate model quality (Y/n)?> ').strip().lower()
+    
+    # Estimate model quality
+    should_estimate_model_quality_input = input('{} estimate model quality (Y/n)?> '.format(prefix_info)).strip().lower()
     if should_estimate_model_quality_input in ['', 'y']:
       ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_train, y_train, should_plot=True)
       print('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
     
-    should_save_model_input = input('save model (Y/n)?> ').strip().lower()
-    if should_save_model_input in ['', 'y']:
-      self._save_model(model, prefix_info)
+    # Save model
+    if not should_load_model:
+      should_save_model_input = input('{} save model (Y/n)?> '.format(prefix_info)).strip().lower()
+      if should_save_model_input in ['', 'y']:
+        self._save_model(model, prefix_info)
     
+    # Query desired landing location
+    desired_loc_land_input = input('{} desired_loc_land = '.format(prefix_info)).strip().lower()
+    desired_loc_land = float(desired_loc_land_input)
+    
+    # Optimize parameters with CMA-ES
+    init_guess = [0.1, 0.1]
+    init_var   = 1.0
+    self._run_model_based_iteration = 0
+    def f(x):
+      print('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
+      self._run_model_based_iteration += 1
+      pos_target, x_1 = x
+      print('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
+      prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+      loc_land_h    = prediction.Y.ravel()
+      loc_land_err  = np.sqrt(np.diag(prediction.Var))
+      loc_land_grad = prediction.Grad.ravel()
+      loss = 0.5 * np.sqrt(desired_loc_land - loc_land_h)
+      print('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
+      print('')
+      return loss
+    res = cma.fmin(f, init_guess, init_var,
+                   bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
+                   popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
+    print('{} result = {}'.format(prefix_info, res))
+    print('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
+    optimal_pos_target = res[0][0]
+    
+    # Test with ground-truth dynamics
+    print('{} test with ground-truth dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
+    loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
+    print('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
 
   def _run_model_free(self):
     pass
