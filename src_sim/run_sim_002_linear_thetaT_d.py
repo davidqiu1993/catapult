@@ -23,6 +23,7 @@ import yaml
 import sys
 import math
 import numpy as np
+import matplotlib.pyplot as plt
 
 import pdb
 
@@ -32,6 +33,11 @@ import cma
 sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/DeltaDNN'))
 from base_ml_dnn import TNNRegression
 from base_util import LoadYAML, SaveYAML
+
+try:
+  input = raw_input
+except NameError:
+  pass
 
 
 
@@ -52,9 +58,10 @@ class TCatapultLPLinearSim(object):
     self.catapult = catapult
     
     self._abs_dirpath_data = abs_dirpath_data
-    self._abs_dirpath_model = abs_dirpath_model
+    self._abs_dirpath_model = os.path.join(abs_dirpath_model, './')
 
-    loader_dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data)
+    loader_dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data, auto_init=False)
+    loader_dataset.load_dataset()
     self._dataset = []
     for entry in loader_dataset:
       is_valid = True
@@ -63,7 +70,7 @@ class TCatapultLPLinearSim(object):
       if is_valid:
         self._dataset.append(entry)
   
-  def _create_model(self, input_dim, output_dim, hiddens=[128, 128], max_updates=20000):
+  def _create_model(self, input_dim, output_dim, hiddens=[128, 128], max_updates=20000, should_load_model=False, prefix_info='catapult'):
     model = TNNRegression()
     
     options = {
@@ -82,13 +89,10 @@ class TCatapultLPLinearSim(object):
     }
     model.Load({'options': options})
     
-    if self._SHOULD_LOAD_MODEL:
-      model.Load(LoadYAML(self._abs_dirpath_model + 'nn_model.yaml'), self._abs_dirpath_model)
+    if should_load_model:
+      self._load_model(model, prefix_info)
     
     model.Init()
-    
-    if self._SHOULD_SAVE_MODEL:
-      SaveYAML(model.Save(self._abs_dirpath_model), self._abs_dirpath_model + 'nn_model.yaml')
     
     return model
 
@@ -98,11 +102,21 @@ class TCatapultLPLinearSim(object):
     else:
       for x, y, n in zip(x_train, y_train, range(len(x_train))):
         model.Update(x, y, not_learn=((n+1) % min(10, len(x_train)) != 0))
+  
+  def _save_model(self, model, prefix_info):
+    print('{} save mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
+    SaveYAML(model.Save(self._abs_dirpath_model), self._abs_dirpath_model + 'nn_model.yaml')
+  
+  def _load_model(self, model, prefix_info):
+    print('{} load mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
+    model.Load(LoadYAML(self._abs_dirpath_model + 'nn_model.yaml'), self._abs_dirpath_model)
+  
+  def _estimate_model_quality(self, model, x_train, y_train, x_valid, y_valid, should_plot=True):
+    assert(len(x_valid) > 0)
+    assert(len(y_valid) > 0)
+    assert(len(x_valid[0]) == 1)
+    assert(len(y_valid[0]) == 1)
     
-    if self._SHOULD_SAVE_MODEL:
-      SaveYAML(model.Save(self.dirpath_model_save), self.dirpath_model_save + 'nn_model.yaml')
-
-  def _estimate_model_quality(self, model, x_train, y_train, x_valid, y_valid):
     y_hypo    = []
     err_hypo  = []
     grad_hypo = []
@@ -143,10 +157,7 @@ class TCatapultLPLinearSim(object):
     ave_stderr_y   = acc_stderr_y / len(y_stderr)
     ave_stderr_err = acc_stderr_err / len(err_stderr)
     
-    if self.filepath_result is not None:
-      print 'TODO: Save result...'
-    
-    if self.plot and dim == 1:
+    if should_plot:
       plot_x_train  = [(x[0]) for x in x_train]
       plot_y_train  = [(y[0]) for y in y_train]
       plot_x_valid  = [(x[0]) for x in x_valid]
@@ -160,8 +171,7 @@ class TCatapultLPLinearSim(object):
       plt.clf()
       
       plt.subplot(211)
-      if self.dirpath_model_load is None:
-        plt.plot(plot_x_train, plot_y_train, 'ro')
+      plt.plot(plot_x_train, plot_y_train, 'ro')
       plt.plot(plot_x_valid, plot_y_valid, 'g--',
                plot_x_valid, plot_y_hypo,  'b-')
       plt.ylabel('y')
@@ -178,29 +188,46 @@ class TCatapultLPLinearSim(object):
     
     return ave_stderr_y, ave_stderr_err
 
-  def _run_model_based_approach(self):
-    model = self._create_model(1, 1, hiddens=[128, 128], max_updates=10000)
-
+  def _run_model_based(self):
+    prefix = 'catapult/model_based'
+    prefix_info = prefix + ':'
+    
+    should_load_model = False
+    should_load_model_input = input('load model without training (y/N)?> ').strip().lower()
+    if should_load_model_input in ['y']:
+      should_load_model = True
+    
+    model = self._create_model(1, 1, hiddens=[128, 128], max_updates=10000, should_load_model=should_load_model, prefix_info=prefix_info)
+    
     x_train = []
     y_train = []
     for entry in self._dataset:
-      x_train.append(self._dataset['action']['pos_target'])
-      y_train.append(self._dataset['result']['loc_land'])
-    self._train_model(model, x_train, y_train, batch_train=True)
+      x_train.append([entry['action']['pos_target']])
+      y_train.append([entry['result']['loc_land']])
+    if not should_load_model:
+      self._train_model(model, x_train, y_train, batch_train=True)
+      
+    should_estimate_model_quality_input = input('estimate model quality (Y/n)?> ').strip().lower()
+    if should_estimate_model_quality_input in ['', 'y']:
+      ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_train, y_train, should_plot=True)
+      print('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
+    
+    should_save_model_input = input('save model (Y/n)?> ').strip().lower()
+    if should_save_model_input in ['', 'y']:
+      self._save_model(model, prefix_info)
+    
 
-    print(self._estimate_model_quality(model, x_train, y_train, x_train, y_train))
-
-  def _run_model_free_approach(self):
+  def _run_model_free(self):
     pass
 
-  def _run_hybrid_approach(self):
+  def _run_hybrid(self):
     pass
 
   def getOperations(self):
     operation_dict = {
-      'mb': _run_model_based_approach,
-      'mf': _run_model_free_approach,
-      'hybrid': _run_hybrid_approach
+      'mb': self._run_model_based,
+      'mf': self._run_model_free,
+      'hybrid': self._run_hybrid
     }
     return operation_dict
   
