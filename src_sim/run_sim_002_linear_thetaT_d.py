@@ -197,7 +197,7 @@ class TCatapultLPLinearSim(object):
     should_load_model_input = input('{} load model without training (y/N)?> '.format(prefix_info)).strip().lower()
     if should_load_model_input in ['y']:
       should_load_model = True
-    model = self._create_model(1, 1, hiddens=[128, 128], max_updates=10000, should_load_model=should_load_model, prefix_info=prefix_info)
+    model = self._create_model(1, 1, hiddens=[128, 128, 128], max_updates=20000, should_load_model=should_load_model, prefix_info=prefix_info)
     
     # Train model
     x_train = []
