@@ -329,8 +329,9 @@ class TCatapultLPLinearSim(object):
       return y
 
     # specify desired landing location sample points
-    N = 11
-    desired_loc_land_samples = [(0 + 2.5*i) for i in range(N)]
+    #desired_loc_land_samples = [(0 + 2.5*i) for i in range(11)] # full sampling
+    desired_loc_land_samples = [0.0, 2.5, 5.0, 7.5, 10.0, 17.5, 20.0, 22.5, 25.0] # ignore 12.5, 15.0 (keep 17.5)
+    N = len(desired_loc_land_samples)
 
     # define loss function
     self._run_model_free_iteration = 0
@@ -359,7 +360,8 @@ class TCatapultLPLinearSim(object):
       return final_loss
 
     # optimize policy parameters with CMA-ES
-    init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0
+    #init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0, full sampling
+    init_guess = [3.84310955e-01, 1.07871025e-01, -5.57357436e-03, 1.17338141e-04] # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
     init_var   = 0.00100
     res = cma.fmin(loss_func, init_guess, init_var, args=(desired_loc_land_samples, N), 
                    popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
