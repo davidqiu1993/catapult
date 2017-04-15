@@ -13,6 +13,7 @@ __website__   = 'www.davidqiu.com'
 __copyright__ = 'Copyright (C) 2017, David Qiu. All rights reserved.'
 
 
+from libLoggerSim import TLoggerSim
 from libCatapultSim import TCatapultSim
 from libCatapultDatasetSim import TCatapultDatasetSim
 
@@ -38,6 +39,8 @@ try:
   input = raw_input
 except NameError:
   pass
+
+logger = TLoggerSim(fp_log='run_sim_002_linear_thetaT_d.log')
 
 
 
@@ -104,11 +107,11 @@ class TCatapultLPLinearSim(object):
         model.Update(x, y, not_learn=((n+1) % min(10, len(x_train)) != 0))
   
   def _save_model(self, model, prefix_info):
-    print('{} save mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
+    logger.log('{} save mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
     SaveYAML(model.Save(self._abs_dirpath_model), self._abs_dirpath_model + 'nn_model.yaml')
   
   def _load_model(self, model, prefix_info):
-    print('{} load mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
+    logger.log('{} load mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
     model.Load(LoadYAML(self._abs_dirpath_model + 'nn_model.yaml'), self._abs_dirpath_model)
   
   def _estimate_model_quality(self, model, x_train, y_train, x_valid, y_valid, should_plot=True):
@@ -189,7 +192,7 @@ class TCatapultLPLinearSim(object):
     return ave_stderr_y, ave_stderr_err
 
   def _run_model_based(self):
-    prefix = 'catapult/model_based'
+    prefix = 'catapult_sim/model_based'
     prefix_info = prefix + ':'
     
     # Create model (and load trained weights)
@@ -212,7 +215,7 @@ class TCatapultLPLinearSim(object):
     should_estimate_model_quality_input = input('{} estimate model quality (Y/n)?> '.format(prefix_info)).strip().lower()
     if should_estimate_model_quality_input in ['', 'y']:
       ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_train, y_train, should_plot=True)
-      print('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
+      logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
     
     # Save model
     if not should_load_model:
@@ -229,35 +232,101 @@ class TCatapultLPLinearSim(object):
     init_var   = 1.0
     self._run_model_based_iteration = 0
     def f(x):
-      print('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
+      logger.log('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
       self._run_model_based_iteration += 1
       pos_target, x_1 = x
-      print('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
+      logger.log('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
       prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
       loc_land_h    = prediction.Y.ravel()
       loc_land_err  = np.sqrt(np.diag(prediction.Var))
       loc_land_grad = prediction.Grad.ravel()
       loss = 0.5 * np.sqrt(desired_loc_land - loc_land_h)
-      print('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
-      print('')
+      logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
+      logger.log('')
       return loss
     res = cma.fmin(f, init_guess, init_var,
                    bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
                    popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
-    print('{} result = {}'.format(prefix_info, res))
-    print('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
+    logger.log('{} result = {}'.format(prefix_info, res))
+    logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
     optimal_pos_target = res[0][0]
-    print('')
+    logger.log('')
     
     # Test in true dynamics
-    print('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
+    logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
     loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
-    print('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
-
-  def _run_model_free(self):
-    prefix = 'catapult/model_free'
+    logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+  
+  def _penalize_action(self, pos_init, pos_target, duration):
+    prefix = 'catapult_sim/penalize_action'
     prefix_info = prefix + ':'
-
+    
+    corrected_pos_init   = pos_init
+    corrected_pos_target = pos_target
+    corrected_duration   = duration
+    
+    penalty = 0
+    penalty_factor = 1
+    
+    min_pos_diff = 0.1 * math.pi
+    
+    if pos_init < self.catapult.POS_MIN:
+      cur_penalty = np.abs(pos_init - self.catapult.POS_MIN) * penalty_factor
+      penalty += cur_penalty
+      logger.log('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'pos_init < self.catapult.POS_MIN'))
+      corrected_pos_init = self.catapult.POS_MIN
+    if pos_init > self.catapult.POS_MID:
+      cur_penalty = np.abs(pos_init - self.catapult.POS_MID) * penalty_factor
+      penalty += cur_penalty
+      logger.log('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'pos_init > self.catapult.POS_MID'))
+      corrected_pos_init = self.catapult.POS_MID
+    
+    if pos_target < (corrected_pos_init + min_pos_diff):
+      cur_penalty = np.abs(pos_target - (corrected_pos_init + min_pos_diff)) * penalty_factor
+      penalty += cur_penalty
+      logger.log('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'pos_target <= (corrected_pos_init + min_pos_diff)'))
+      corrected_pos_target = (corrected_pos_init + min_pos_diff)
+    if pos_target > self.catapult.POS_MAX:
+      cur_penalty = np.abs(pos_target - self.catapult.POS_MAX) * penalty_factor
+      penalty += cur_penalty
+      logger.log('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'pos_target > self.catapult.POS_MAX'))
+      corrected_pos_target = self.catapult.POS_MAX
+    
+    if duration < self.catapult.DURATION_MIN:
+      cur_penalty = np.abs(duration - self.catapult.DURATION_MIN) * penalty_factor
+      penalty += cur_penalty
+      logger.log('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'duration < self.catapult.DURATION_MIN'))
+      corrected_duration = self.catapult.DURATION_MIN
+    if duration > 0.6:
+      cur_penalty = np.abs(duration - 0.6) * penalty_factor
+      penalty += cur_penalty
+      logger.log('{} penalty = {} ({})'.format(prefix_info, cur_penalty, 'duration > 0.6'))
+      corrected_duration = 0.6
+    
+    return corrected_pos_init, corrected_pos_target, corrected_duration, penalty
+  
+  def _launch_test(self, dataset, pos_init, pos_target, duration, prefix='catapult_sim'):
+    prefix_info = prefix + ':'
+    
+    logger.log('{} launch test. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, pos_init, pos_target, duration))
+    
+    loc_land = catapult.throw_linear(pos_init, pos_target, duration)
+    
+    logger.log('{} loc_land = {}'.format(prefix_info, loc_land))
+    
+    entry = dataset.new_entry_linear_sim(float(pos_init), float(pos_target), float(duration), float(loc_land))
+    dataset.append(entry)
+    
+    return entry
+  
+  def _run_model_free(self):
+    prefix = 'catapult_sim/model_free'
+    prefix_info = prefix + ':'
+    
+    # initialize dataset
+    saver_dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data, auto_init=False)
+    saver_dataset.init_yaml()
+    
     # define policy function with parameters
     def policy_func(desired_loc_land, params):
       x = desired_loc_land
@@ -274,41 +343,44 @@ class TCatapultLPLinearSim(object):
     # define loss function
     self._run_model_free_iteration = 0
     def loss_func(params, desired_loc_land_samples, N):
-      print('{} optimize policy parameters with CMA-ES. (iteration = {}, N = {})'.format(prefix_info, self._run_model_free_iteration, N))
+      logger.log('{} optimize policy parameters with CMA-ES. (iteration = {}, N = {})'.format(prefix_info, self._run_model_free_iteration, N))
       self._run_model_free_iteration += 1
-      print('{} sample from CMA-ES. (params = {})'.format(prefix_info, params))
-      pos_target_hypos = [policy_func(desired_loc_land_samples[i]) for i in range(N)]
-      print('{} generate hypo target positions. (hypos = {})'.format(prefix_info, pos_target_hypos))
+      logger.log('{} sample from CMA-ES. (params = {})'.format(prefix_info, params))
+      pos_target_hypos = [policy_func(desired_loc_land_samples[i], params) for i in range(N)]
+      logger.log('{} generate hypo target positions. (hypos = {})'.format(prefix_info, pos_target_hypos))
       loss = 0
       for i in range(N):
-        loc_land_i = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_hypos[i], self._FIXED_DURATION)
-        loss += (desired_loc_land_samples[i] - loc_land_i)**2
+        pos_init, pos_target, duration, penalty = self._penalize_action(self._FIXED_POS_INIT, pos_target_hypos[i], self._FIXED_DURATION)
+        logger.log('{} test target position hypotheses suggested by current policy parameters. (sample = {}/{})'.format(prefix_info, i+1, N))
+        entry = self._launch_test(saver_dataset, pos_init, pos_target, duration, prefix=prefix)
+        loc_land_i = float(entry['result']['loc_land'])
+        loss += (desired_loc_land_samples[i] - loc_land_i)**2 + penalty**2
       loss = loss / (2 * N)
-      print('{} loss = {}'.format(prefix_info, loss))
-      print('')
+      logger.log('{} loss = {}'.format(prefix_info, loss))
+      logger.log('')
       return loss
 
     # optimize policy parameters with CMA-ES
-    init_guess = [0.0, 0.53156, -0.02821, 0.00038] # for duration = 0.10, pos_init = 0.0
+    init_guess = [0.00111591, 0.53223395, -0.02676398, 0.00060071] # for duration = 0.10, pos_init = 0.0
     init_var   = 0.00100
     res = cma.fmin(loss_func, init_guess, init_var, args=(desired_loc_land_samples, N), 
                    popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
     optimal_params = res[0]
-    print('{} result = {}'.format(prefix_info, res))
-    print('{} optimal solution found. (params = {})'.format(prefix_info, optimal_params))
-    print('')
+    logger.log('{} result = {}'.format(prefix_info, res))
+    logger.log('{} optimal solution found. (params = {})'.format(prefix_info, optimal_params))
+    logger.log('')
 
     # Query desired landing location
     desired_loc_land_input = input('{} desired_loc_land = '.format(prefix_info)).strip().lower()
     desired_loc_land = float(desired_loc_land_input)
 
     # test policy parameters in true dynamics
-    print('{} apply optimal policy parameters. (params = {})'.format(prefix_info, optimal_params))
+    logger.log('{} apply optimal policy parameters. (params = {})'.format(prefix_info, optimal_params))
     pos_target_hypo = policy_func(desired_loc_land, optimal_params)
-    print('{} predict action by parameterized policy. (desired_loc_land = {}, pos_target_hypo = {})'.format(prefix_info, desired_loc_land, pos_target_hypo))
-    print('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION))
+    logger.log('{} predict action by parameterized policy. (desired_loc_land = {}, pos_target_hypo = {})'.format(prefix_info, desired_loc_land, pos_target_hypo))
+    logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION))
     loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
-    print('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+    logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
 
 
   def _run_hybrid(self):
@@ -348,7 +420,7 @@ if __name__ == '__main__':
     if len(sys.argv) == 2 and (sys.argv[1] in agent.getOperations()):
       operation = sys.argv[1]
     else:
-      print('usage: ./run_001_linear.py <operation>')
+      logger.log('usage: ./run_sim_002_linear_thetaT_d.py <operation>')
       quit()
   
   agent.run(operation)
