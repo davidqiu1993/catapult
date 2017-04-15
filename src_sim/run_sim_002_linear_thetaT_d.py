@@ -266,7 +266,7 @@ class TCatapultLPLinearSim(object):
     corrected_duration   = duration
     
     penalty = 0
-    penalty_factor = 1
+    penalty_factor = 10
     
     min_pos_diff = 0.1 * math.pi
     
@@ -305,18 +305,10 @@ class TCatapultLPLinearSim(object):
     
     return corrected_pos_init, corrected_pos_target, corrected_duration, penalty
   
-  def _launch_test(self, dataset, pos_init, pos_target, duration, prefix='catapult_sim'):
-    prefix_info = prefix + ':'
-    
-    logger.log('{} launch test. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, pos_init, pos_target, duration))
-    
+  def _launch_test(self, dataset, pos_init, pos_target, duration):
     loc_land = catapult.throw_linear(pos_init, pos_target, duration)
-    
-    logger.log('{} loc_land = {}'.format(prefix_info, loc_land))
-    
     entry = dataset.new_entry_linear_sim(float(pos_init), float(pos_target), float(duration), float(loc_land))
     dataset.append(entry)
-    
     return entry
   
   def _run_model_free(self):
@@ -348,20 +340,26 @@ class TCatapultLPLinearSim(object):
       logger.log('{} sample from CMA-ES. (params = {})'.format(prefix_info, params))
       pos_target_hypos = [policy_func(desired_loc_land_samples[i], params) for i in range(N)]
       logger.log('{} generate hypo target positions. (hypos = {})'.format(prefix_info, pos_target_hypos))
-      loss = 0
+      sum_loss = 0
+      sum_penalty = 0
       for i in range(N):
         pos_init, pos_target, duration, penalty = self._penalize_action(self._FIXED_POS_INIT, pos_target_hypos[i], self._FIXED_DURATION)
         logger.log('{} test target position hypotheses suggested by current policy parameters. (sample = {}/{})'.format(prefix_info, i+1, N))
-        entry = self._launch_test(saver_dataset, pos_init, pos_target, duration, prefix=prefix)
+        logger.log('{} launch test. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, pos_init, pos_target, duration))
+        entry = self._launch_test(saver_dataset, pos_init, pos_target, duration)
         loc_land_i = float(entry['result']['loc_land'])
-        loss += (desired_loc_land_samples[i] - loc_land_i)**2 + penalty**2
-      loss = loss / (2 * N)
-      logger.log('{} loss = {}'.format(prefix_info, loss))
+        logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land_i, desired_loc_land_samples[i]))
+        sum_penalty += penalty
+        sum_loss += (desired_loc_land_samples[i] - loc_land_i)**2
+      ave_loss = sum_loss / (2 * N)
+      ave_penalty = sum_penalty / (2 * N)
+      final_loss = ave_loss + ave_penalty
+      logger.log('{} loss = {}, penalty = {}'.format(prefix_info, final_loss, ave_penalty))
       logger.log('')
-      return loss
+      return final_loss
 
     # optimize policy parameters with CMA-ES
-    init_guess = [0.00111591, 0.53223395, -0.02676398, 0.00060071] # for duration = 0.10, pos_init = 0.0
+    init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0
     init_var   = 0.00100
     res = cma.fmin(loss_func, init_guess, init_var, args=(desired_loc_land_samples, N), 
                    popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
