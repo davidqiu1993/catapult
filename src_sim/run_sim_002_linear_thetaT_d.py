@@ -330,7 +330,7 @@ class TCatapultLPLinearSim(object):
       for i in range(4):
         y += p[i] * x**i
       return y
-
+    
     # specify desired landing location sample points
     #desired_loc_land_samples = [(0 + 2.5*i) for i in range(11)] # full sampling
     desired_loc_land_samples = [0.0, 2.5, 5.0, 7.5, 10.0, 17.5, 20.0, 22.5, 25.0] # ignore 12.5, 15.0 (keep 17.5)
@@ -370,6 +370,7 @@ class TCatapultLPLinearSim(object):
     res = cma.fmin(loss_func, init_guess, init_var, args=(desired_loc_land_samples, N), 
                    popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
     optimal_params = res[0]
+    #optimal_params = [3.84177005e-01,   1.07917544e-01,  -5.55294093e-03,   1.14927976e-04]
     logger.log('{} result = {}'.format(prefix_info, res))
     logger.log('{} optimal solution found. (params = {})'.format(prefix_info, optimal_params))
     logger.log('')
@@ -383,7 +384,7 @@ class TCatapultLPLinearSim(object):
     pos_target_hypo = policy_func(desired_loc_land, optimal_params)
     logger.log('{} predict action by parameterized policy. (desired_loc_land = {}, pos_target_hypo = {})'.format(prefix_info, desired_loc_land, pos_target_hypo))
     logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION))
-    loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
+    loc_land = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION)
     logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
 
   def _run_hybrid(self):
