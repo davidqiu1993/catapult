@@ -467,8 +467,9 @@ class TCatapultLPLinearSim(object):
 
     # optimize policy parameters with CMA-ES
     #mf_policy_init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0, full sampling
+    #mf_policy_init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, full sampling
     mf_policy_init_guess = [3.84310955e-01, 1.07871025e-01, -5.57357436e-03, 1.17338141e-04] # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
-    mf_policy_init_var   = 0.00100
+    mf_policy_init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
     mf_policy_res = cma.fmin(mf_policy_loss_func, mf_policy_init_guess, mf_policy_init_var, args=(desired_loc_land_samples, N), 
                              popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
     mf_policy_optimal_params = mf_policy_res[0]
