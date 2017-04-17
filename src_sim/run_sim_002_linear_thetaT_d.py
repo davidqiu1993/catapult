@@ -73,16 +73,16 @@ class TCatapultLPLinearSim(object):
       if is_valid:
         self._dataset.append(entry)
   
-  def _create_model(self, input_dim, output_dim, hiddens=[128, 128], max_updates=20000, should_load_model=False, prefix_info='catapult'):
+  def _create_model(self, input_dim, output_dim, hiddens=[200, 200], max_updates=20000, should_load_model=False, prefix_info='catapult'):
     model = TNNRegression()
     
     options = {
       #'AdaDelta_rho':         0.5, # 0.5, 0.9
-      'dropout':              True,
-      'dropout_ratio':        0.01,
+      #'dropout':              True,
+      #'dropout_ratio':        0.01,
       'loss_stddev_stop':     1.0e-4,
       'loss_stddev_stop_err': 1.0e-6,
-      #'batchsize':            5, # 5, 10
+      'batchsize':            100,
       #'num_check_stop':       50,
       #'loss_maf_alpha':       0.4,
       'num_max_update':       max_updates,
@@ -195,12 +195,15 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/model_based'
     prefix_info = prefix + ':'
     
-    # Create model (and load trained weights)
-    should_load_model = False
-    should_load_model_input = input('{} load model without training (y/N)?> '.format(prefix_info)).strip().lower()
-    if should_load_model_input in ['y']:
-      should_load_model = True
-    model = self._create_model(1, 1, hiddens=[128, 128, 128], max_updates=20000, should_load_model=should_load_model, prefix_info=prefix_info)
+    # Create model (and train/load)
+    should_train_model = True
+    should_train_model_input = input('{} train model rather than load from model file (Y/n)?> '.format(prefix_info)).strip().lower()
+    if should_train_model_input in ['', 'y']:
+      should_train_model = True
+    else:
+      should_train_model = False
+    should_load_model = (not should_train_model)
+    model = self._create_model(1, 1, hiddens=[200, 200], max_updates=40000, should_load_model=should_load_model, prefix_info=prefix_info)
     
     # Train model
     x_train = []
@@ -382,7 +385,6 @@ class TCatapultLPLinearSim(object):
     logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION))
     loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
     logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
-
 
   def _run_hybrid(self):
     pass

@@ -130,7 +130,7 @@ class DeltaDNNTest(object):
     x_valid, y_valid = self._generateSamples(func_name, bound, n_valid, noise=None,  uniform=True )
     
     if self.filepath_dataset is not None:
-      print 'TODO: Save dataset...'
+      print('TODO: Save dataset...')
     
     if self.dirpath_model_load is None:
       self._trainModel(x_train, y_train, batch_train=True)
@@ -176,7 +176,7 @@ class DeltaDNNTest(object):
     ave_stderr_err = acc_stderr_err / len(err_stderr)
     
     if self.filepath_result is not None:
-      print 'TODO: Save result...'
+      print('TODO: Save result...')
     
     if self.plot and dim == 1:
       plot_x_train  = [(x[0]) for x in x_train]
@@ -257,7 +257,7 @@ class DeltaDNNTest(object):
         ave_stderr_y, ave_stderr_err = self.test_same_dim(func, bound, n_train=n_train, n_valid=n_valid, noise=noise, hiddens=hiddens, max_updates=max_updates)
         x_acc_stderr_y += ave_stderr_y
         x_acc_stderr_err += ave_stderr_err
-        print 'progress (sample): ' + str(i_sample + 1) + '/' + str(n_samples) + ', ' + str(i_feature_comb) + '/' + str(len(feature_space))
+        print('progress (sample): ' + str(i_sample + 1) + '/' + str(n_samples) + ', ' + str(i_feature_comb) + '/' + str(len(feature_space)))
       x_ave_stderr_y   = x_acc_stderr_y / n_samples
       x_ave_stderr_err = x_acc_stderr_err / n_samples
       
@@ -267,8 +267,8 @@ class DeltaDNNTest(object):
         'ave_stderr_err': x_ave_stderr_err
       }
       
-      print 'progress (feature): ' + str(i_feature_comb + 1) + '/' + str(len(feature_space))
-      print result_i
+      print('progress (feature): ' + str(i_feature_comb + 1) + '/' + str(len(feature_space)))
+      print(result_i)
       
       result.append(result_i)
       
@@ -287,16 +287,16 @@ if __name__ == '__main__':
   
   if True:
     ave_stderr_y, ave_stderr_err = tester.test_same_dim('step', [[-3.0, 5.0]], noise=[0.2], max_updates=10000)
-    print 'ave_stderr_y =', ave_stderr_y
-    print 'ave_stderr_err =', ave_stderr_err
+    print('ave_stderr_y ='.format(ave_stderr_y))
+    print('ave_stderr_err ='.format(ave_stderr_err))
   
   if False:
     result = tester.test_structures([[-5.0, 5.0]], fp_result='david_dnn_result_2_tmp.yaml')
     
     for result_i in result:
-      print result_i['feature_comb']
-      print 'ave_stderr_y =', result_i['ave_stderr_y']
-      print 'ave_stderr_err =', result_i['ave_stderr_err']
+      print(result_i['feature_comb'])
+      print('ave_stderr_y ='.format(result_i['ave_stderr_y']))
+      print('ave_stderr_err ='.format(result_i['ave_stderr_err']))
     
     SaveYAML(result, 'david_dnn_result_2.yaml')
 
