@@ -240,10 +240,10 @@ class TCatapultLPLinearSim(object):
       pos_target, x_1 = x
       logger.log('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
       prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
-      loc_land_h    = prediction.Y.ravel()
-      loc_land_err  = np.sqrt(np.diag(prediction.Var))
-      loc_land_grad = prediction.Grad.ravel()
-      loss = 0.5 * np.sqrt(desired_loc_land - loc_land_h)
+      loc_land_h    = (prediction.Y.ravel())[0]
+      loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+      loc_land_grad = (prediction.Grad.ravel())[0]
+      loss = 0.5 * (desired_loc_land - loc_land_h)**2
       logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
       logger.log('')
       return loss
@@ -451,9 +451,9 @@ class TCatapultLPLinearSim(object):
         logger.log('{} check with model the hypotheses suggested by current policy parameters. (sample = {}/{})'.format(prefix_info, i+1, N))
         logger.log('{} predict by model. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, pos_init, pos_target, duration))
         prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
-        loc_land_h    = prediction.Y.ravel()
-        loc_land_err  = np.sqrt(np.diag(prediction.Var))
-        loc_land_grad = prediction.Grad.ravel()
+        loc_land_h    = (prediction.Y.ravel())[0]
+        loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+        loc_land_grad = (prediction.Grad.ravel())[0]
         loc_land_i = float(loc_land_h)
         logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land_i, desired_loc_land_samples[i]))
         sum_penalty += penalty
@@ -466,16 +466,22 @@ class TCatapultLPLinearSim(object):
       return final_loss
 
     # optimize policy parameters with CMA-ES
+    mf_policy_start_policy_params_optimization_input = input('{} start policy parameters optimization with model (Y)?> '.format(prefix_info))
     #mf_policy_init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0, full sampling
     #mf_policy_init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, full sampling
     mf_policy_init_guess = [3.84310955e-01, 1.07871025e-01, -5.57357436e-03, 1.17338141e-04] # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
     mf_policy_init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
+    """
     mf_policy_res = cma.fmin(mf_policy_loss_func, mf_policy_init_guess, mf_policy_init_var, args=(desired_loc_land_samples, N), 
                              popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
     mf_policy_optimal_params = mf_policy_res[0]
+    """
+    mf_policy_optimal_params = [  3.08515264e-01,   1.16457655e-01,  -5.83116752e-03,   1.19370654e-04]
+    """
     logger.log('{} result = {}'.format(prefix_info, mf_policy_res))
     logger.log('{} optimal solution found. (params = {})'.format(prefix_info, mf_policy_optimal_params))
     logger.log('')
+    """
 
     # Query desired landing location
     desired_loc_land_input = input('{} desired_loc_land = '.format(prefix_info)).strip().lower()
@@ -494,10 +500,10 @@ class TCatapultLPLinearSim(object):
       pos_target, x_1 = x
       logger.log('{} sample from model by CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
       prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
-      loc_land_h    = prediction.Y.ravel()
-      loc_land_err  = np.sqrt(np.diag(prediction.Var))
-      loc_land_grad = prediction.Grad.ravel()
-      loss = 0.5 * np.sqrt(desired_loc_land - loc_land_h)
+      loc_land_h    = (prediction.Y.ravel())[0]
+      loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+      loc_land_grad = (prediction.Grad.ravel())[0]
+      loss = 0.5 * (desired_loc_land - loc_land_h)**2
       logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
       logger.log('')
       return loss
