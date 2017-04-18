@@ -40,7 +40,8 @@ try:
 except NameError:
   pass
 
-logger = TLoggerSim(fp_log='run_sim_002_linear_thetaT_d.log')
+#logger = TLoggerSim(fp_log='run_sim_002_linear_thetaT_d.log')
+logger = TLoggerSim(fp_log=None)
 
 
 
