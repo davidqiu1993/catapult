@@ -174,23 +174,19 @@ class TCatapultLPLinearSim(object):
       plt.figure(1)
       plt.clf()
       
-      plt.subplot(211)
       plt.plot(plot_x_train, plot_y_train, 'ro')
-      plt.plot(plot_x_valid, plot_y_valid, 'g--',
-               plot_x_valid, plot_y_hypo,  'b-')
+      plt.plot(plot_x_valid, plot_y_valid, 'g--')
+      plt.plot(plot_x_valid, plot_y_hypo,  'b-')
+      plt.errorbar(plot_x_valid, plot_y_hypo, plot_err_hypo, linestyle='None', marker='^')
       plt.ylabel('y')
-      plt.grid(True)
-      
-      plt.subplot(212)
-      plt.plot(plot_x_valid, plot_y_diff,   'ro',
-               plot_x_valid, plot_y_stderr, 'g--',
-               plot_x_valid, plot_err_hypo, 'b-')
-      plt.ylabel('err')
       plt.grid(True)
       
       plt.show()
     
     return ave_stderr_y, ave_stderr_err
+
+  def _estimate_test_results(self, test_results):
+    pass
 
   def _run_model_based(self):
     prefix = 'catapult_sim/model_based'
@@ -227,39 +223,58 @@ class TCatapultLPLinearSim(object):
       if should_save_model_input in ['', 'y']:
         self._save_model(model, prefix_info)
     
-    # Query desired landing location
-    desired_loc_land_input = input('{} desired_loc_land = '.format(prefix_info)).strip().lower()
-    desired_loc_land = float(desired_loc_land_input)
-    
-    # Optimize parameters with CMA-ES
-    init_guess = [0.1, 0.1]
-    init_var   = 1.0
-    self._run_model_based_iteration = 0
-    def f(x):
-      logger.log('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
-      self._run_model_based_iteration += 1
-      pos_target, x_1 = x
-      logger.log('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
-      prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
-      loc_land_h    = (prediction.Y.ravel())[0]
-      loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
-      loc_land_grad = (prediction.Grad.ravel())[0]
-      loss = 0.5 * (desired_loc_land - loc_land_h)**2
-      logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
+    # Test desired landing locations
+    test_sample_desired_loc_land = [(0.0 + 1.25*i) for i in range(21)]
+    test_results = []
+    for i in len(test_sample_desired_loc_land):
+      # Query desired landing location
+      desired_loc_land = test_sample_desired_loc_land[i]
+      
+      # Optimize parameters with CMA-ES
+      init_guess = [0.1, 0.1]
+      init_var   = 1.0
+      self._run_model_based_iteration = 0
+      def f(x):
+        logger.log('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
+        self._run_model_based_iteration += 1
+        pos_target, x_1 = x
+        logger.log('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
+        prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+        loc_land_h    = (prediction.Y.ravel())[0]
+        loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+        loc_land_grad = (prediction.Grad.ravel())[0]
+        loss = 0.5 * (desired_loc_land - loc_land_h)**2
+        logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
+        logger.log('')
+        return loss
+      res = cma.fmin(f, init_guess, init_var,
+                     bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
+                     popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
+      logger.log('{} result = {}'.format(prefix_info, res))
+      logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
+      optimal_pos_target = res[0][0]
       logger.log('')
-      return loss
-    res = cma.fmin(f, init_guess, init_var,
-                   bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
-                   popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
-    logger.log('{} result = {}'.format(prefix_info, res))
-    logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
-    optimal_pos_target = res[0][0]
-    logger.log('')
-    
-    # Test in true dynamics
-    logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
-    loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
-    logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+      
+      # Test in true dynamics
+      logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
+      loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
+      logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+
+      # Add to test results
+      test_result = {
+        'approach': 'model-based, CMA-ES(action)',
+        'desired_loc_land': desired_loc_land,
+        'loc_land': loc_land,
+        'pos_target': optimal_pos_target,
+        'preopt_samples': len(self._dataset),
+        'samples': 0,
+        'preopt_simulations': 0,
+        'simulations': self._run_model_based_iteration
+      }
+      test_results.append(test_result)
+
+    # Estimate test results
+    self._estimate_test_results(test_results)
   
   def _penalize_action(self, pos_init, pos_target, duration):
     prefix = 'catapult_sim/penalize_action'
