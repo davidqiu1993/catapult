@@ -520,7 +520,15 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/model_hybrid'
     prefix_info = prefix + ':'
     
-    # Create model (and train/load)
+    # query operation
+    logger.log('{} hyprid approach operations:'.format(prefix_info))
+    logger.log('  - (1) launch policy parameters optimization with CMA-ES in complete sample space')
+    logger.log('  - (2) launch policy parameters optimization with CMA-ES in touched sample space')
+    hybrid_operation_input = input('{} please model-free approach operation (1/2)> '.format(prefix_info)).strip().lower()
+    hybrid_operation = str(int(hybrid_operation_input))
+    assert(hybrid_operation in ['1', '2'])
+    
+    # create model (and train/load)
     should_train_model = True
     should_train_model_input = input('{} train model rather than load from model file (Y/n)?> '.format(prefix_info)).strip().lower()
     if should_train_model_input in ['', 'y']:
@@ -530,7 +538,7 @@ class TCatapultLPLinearSim(object):
     should_load_model = (not should_train_model)
     model = self._create_model(1, 1, hiddens=[200, 200], max_updates=40000, should_load_model=should_load_model, prefix_info=prefix_info)
     
-    # Train model
+    # train model
     x_train = []
     y_train = []
     for entry in self._dataset:
@@ -539,7 +547,7 @@ class TCatapultLPLinearSim(object):
     if not should_load_model:
       self._train_model(model, x_train, y_train, batch_train=True)
     
-    # Estimate model quality
+    # estimate model quality
     x_valid = [x_train[i * 2] for i in range(int(len(x_train) / 2))]
     y_valid = [y_train[i * 2] for i in range(int(len(y_train) / 2))]
     should_estimate_model_quality_input = input('{} estimate model quality (Y/n)?> '.format(prefix_info)).strip().lower()
@@ -547,7 +555,7 @@ class TCatapultLPLinearSim(object):
       ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_valid, y_valid, should_plot=True)
       logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
     
-    # Save model
+    # save model
     if not should_load_model:
       should_save_model_input = input('{} save model (Y/n)?> '.format(prefix_info)).strip().lower()
       if should_save_model_input in ['', 'y']:
@@ -563,8 +571,12 @@ class TCatapultLPLinearSim(object):
       return y
 
     # specify desired landing location sample points
-    #desired_loc_land_samples = [(0 + 2.5*i) for i in range(11)] # full sampling
-    desired_loc_land_samples = [0.0, 2.5, 5.0, 7.5, 10.0, 17.5, 20.0, 22.5, 25.0] # ignore 12.5, 15.0 (keep 17.5)
+    if hybrid_operation == '1':
+      desired_loc_land_samples = [(0 + 2.5*i) for i in range(11)] # full sampling
+    elif hybrid_operation == '2':
+      desired_loc_land_samples = [0.0, 2.5, 5.0, 7.5, 10.0, 17.5, 20.0, 22.5, 25.0] # ignore 12.5, 15.0 (keep 17.5)
+    else:
+      assert(False)
     N = len(desired_loc_land_samples)
 
     # define loss function
@@ -598,54 +610,87 @@ class TCatapultLPLinearSim(object):
 
     # optimize policy parameters with CMA-ES
     mf_policy_start_policy_params_optimization_input = input('{} start policy parameters optimization with model (Y)?> '.format(prefix_info))
-    #mf_policy_init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0, full sampling
-    #mf_policy_init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, full sampling
-    mf_policy_init_guess = [3.84310955e-01, 1.07871025e-01, -5.57357436e-03, 1.17338141e-04] # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
-    mf_policy_init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
+    if hybrid_operation == '1':
+      mf_policy_init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0, full sampling
+      mf_policy_init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, full sampling
+    elif hybrid_operation == '2':
+      mf_policy_init_guess = [3.84310955e-01, 1.07871025e-01, -5.57357436e-03, 1.17338141e-04] # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
+      mf_policy_init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
+    else:
+      assert(False)
     mf_policy_res = cma.fmin(mf_policy_loss_func, mf_policy_init_guess, mf_policy_init_var, args=(desired_loc_land_samples, N), 
-                             popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
+                             popsize=20, tolx=10e-4, verb_disp=False, verb_log=0)
     mf_policy_optimal_params = mf_policy_res[0]
     #mf_policy_optimal_params = [  3.08515264e-01,   1.16457655e-01,  -5.83116752e-03,   1.19370654e-04]
     logger.log('{} result = {}'.format(prefix_info, mf_policy_res))
     logger.log('{} optimal solution found. (params = {})'.format(prefix_info, mf_policy_optimal_params))
     logger.log('')
-
-    # Query desired landing location
-    desired_loc_land_input = input('{} desired_loc_land = '.format(prefix_info)).strip().lower()
-    desired_loc_land = float(desired_loc_land_input)
-
-    # predict optimal initial action from policy optimized by model
-    optimal_inital_action = policy_func(desired_loc_land, mf_policy_optimal_params)
-
-    # Optimize action with model by CMA-ES
-    mb_action_init_guess = [optimal_inital_action, 0.1]
-    mb_action_init_var   = 0.5
-    self._run_hybrid_mb_action_iteration = 0
-    def mb_action_loss_func(x):
-      logger.log('{} optimization with model by CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_hybrid_mb_action_iteration, desired_loc_land))
-      self._run_hybrid_mb_action_iteration += 1
-      pos_target, x_1 = x
-      logger.log('{} sample from model by CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
-      prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
-      loc_land_h    = (prediction.Y.ravel())[0]
-      loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
-      loc_land_grad = (prediction.Grad.ravel())[0]
-      loss = 0.5 * (desired_loc_land - loc_land_h)**2
-      logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
-      logger.log('')
-      return loss
-    mb_action_res = cma.fmin(mb_action_loss_func, mb_action_init_guess, mb_action_init_var,
-                             bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
-                             popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
-    mb_action_optimal_pos_target = mb_action_res[0][0]
-    logger.log('{} result = {}'.format(prefix_info, mb_action_res))
-    logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, mb_action_optimal_pos_target, self._FIXED_POS_INIT, self._FIXED_DURATION))
-    logger.log('')
     
-    # Test in true dynamics
-    logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, mb_action_optimal_pos_target, self._FIXED_DURATION))
-    loc_land = catapult.throw_linear(self._FIXED_POS_INIT, mb_action_optimal_pos_target, self._FIXED_DURATION)
-    logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+    # test desired landing locations
+    test_sample_desired_loc_land = [(0.0 + 1.25*i) for i in range(21)]
+    test_results = []
+    for i in range(len(test_sample_desired_loc_land)):
+      # query desired landing location
+      desired_loc_land = test_sample_desired_loc_land[i]
+      
+      # predict optimal initial action from policy optimized by model
+      optimal_inital_action = policy_func(desired_loc_land, mf_policy_optimal_params) # pos_target
+      
+      # evaluate initial action
+      eval_prediction = model.Predict([optimal_inital_action], x_var=0.0**2, with_var=True, with_grad=True)
+      eval_loc_land_h = (eval_prediction.Y.ravel())[0]
+      
+      # optimize action with model by CMA-ES
+      mb_action_init_guess = [optimal_inital_action, 0.1]
+      mb_action_init_var   = 0.75 * math.pi * abs(desired_loc_land - eval_loc_land_h) / 25.0
+      self._run_hybrid_mb_action_iteration = 0
+      def mb_action_loss_func(x):
+        logger.log('{} optimization with model by CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_hybrid_mb_action_iteration, desired_loc_land))
+        self._run_hybrid_mb_action_iteration += 1
+        pos_target, x_1 = x
+        logger.log('{} sample from model by CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
+        prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+        loc_land_h    = (prediction.Y.ravel())[0]
+        loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+        loc_land_grad = (prediction.Grad.ravel())[0]
+        loss = 0.5 * (desired_loc_land - loc_land_h)**2
+        logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
+        logger.log('')
+        return loss
+      mb_has_finished_action_optimization = False
+      while not mb_has_finished_action_optimization:
+        try:
+          mb_action_res = cma.fmin(mb_action_loss_func, mb_action_init_guess, mb_action_init_var,
+                                  bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
+                                  popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
+          mb_has_finished_action_optimization = True
+        except:
+          mb_has_finished_action_optimization = False
+      mb_action_optimal_pos_target = mb_action_res[0][0]
+      logger.log('{} result = {}'.format(prefix_info, mb_action_res))
+      logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, mb_action_optimal_pos_target, self._FIXED_POS_INIT, self._FIXED_DURATION))
+      logger.log('')
+      
+      # test in true dynamics
+      logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, mb_action_optimal_pos_target, self._FIXED_DURATION))
+      loc_land = catapult.throw_linear(self._FIXED_POS_INIT, mb_action_optimal_pos_target, self._FIXED_DURATION)
+      logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+      
+      # Add to test results
+      entry = {
+        'approach': 'hybrid, CMA-ES(policy; model), CMA-ES(action; model, policy(init_action))',
+        'desired_loc_land': float(desired_loc_land),
+        'loc_land': float(loc_land),
+        'pos_target': float(mb_action_optimal_pos_target),
+        'preopt_samples': int(len(self._dataset)),
+        'samples': int(0),
+        'preopt_simulations': int(self._run_hybrid_mf_policy_iteration * N),
+        'simulations': int(self._run_hybrid_mb_action_iteration)
+      }
+      test_results.append(entry)
+    
+    # Estimate test results
+    self._estimate_test_results(test_results)
 
   def getOperations(self):
     operation_dict = {
