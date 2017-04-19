@@ -197,7 +197,7 @@ class TCatapultLPLinearSim(object):
       filepath_test_results = os.path.abspath(os.path.join(self._abs_dirpath_log, filename_test_results))
       with open(filepath_test_results, 'w') as yaml_file:
         yaml.dump(test_results, yaml_file, default_flow_style=False)
-      print('{} save test results. (path={})'.format(prefix_info, filepath_test_results))
+      logger.log('{} save test results. (path={})'.format(prefix_info, filepath_test_results))
     
     samples_actual_loc_land = []
     samples_actual_pos_target = []
@@ -393,9 +393,15 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/model_free'
     prefix_info = prefix + ':'
     
-    # initialize dataset
-    saver_dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data, auto_init=False)
-    saver_dataset.init_yaml()
+    # query operation
+    logger.log('{} model-free operations:'.format(prefix_info))
+    logger.log('  - (1) launch policy parameters optimization with CMA-ES in complete sample space')
+    logger.log('  - (2) launch policy parameters optimization with CMA-ES in touched sample space')
+    logger.log('  - (3) load pre-optimized policy parameters in complete sample space')
+    logger.log('  - (4) load pre-optimized policy parameters in touched sample space')
+    mf_operation_input = input('{} please model-free approach operation (1/2/..)> '.format(prefix_info)).strip().lower()
+    mf_operation = str(int(mf_operation_input))
+    assert(mf_operation in ['1', '2', '3', '4'])
     
     # define policy function with parameters
     def policy_func(desired_loc_land, params):
@@ -407,60 +413,108 @@ class TCatapultLPLinearSim(object):
       return y
     
     # specify desired landing location sample points
-    #desired_loc_land_samples = [(0 + 2.5*i) for i in range(11)] # full sampling
-    desired_loc_land_samples = [0.0, 2.5, 5.0, 7.5, 10.0, 17.5, 20.0, 22.5, 25.0] # ignore 12.5, 15.0 (keep 17.5)
+    if mf_operation == '1' or mf_operation == '3':
+      desired_loc_land_samples = [(0 + 2.5*i) for i in range(11)] # full sampling
+    elif mf_operation == '2' or mf_operation == '4':
+      desired_loc_land_samples = [0.0, 2.5, 5.0, 7.5, 10.0, 17.5, 20.0, 22.5, 25.0] # ignore 12.5, 15.0 (keep 17.5)
+    else:
+      assert(False)
     N = len(desired_loc_land_samples)
+    
+    # select operation
+    logger.log('{} selected operation: {}'.format(prefix_info, mf_operation))
+    if mf_operation == '1' or mf_operation == '2':
+      saver_dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data, auto_init=False)
+      saver_dataset.init_yaml()
+      
+      # define loss function
+      self._run_model_free_iteration = 0
+      def loss_func(params, desired_loc_land_samples, N):
+        logger.log('{} optimize policy parameters with CMA-ES. (iteration = {}, N = {})'.format(prefix_info, self._run_model_free_iteration, N))
+        self._run_model_free_iteration += 1
+        logger.log('{} sample from CMA-ES. (params = {})'.format(prefix_info, params))
+        pos_target_hypos = [policy_func(desired_loc_land_samples[i], params) for i in range(N)]
+        logger.log('{} generate hypo target positions. (hypos = {})'.format(prefix_info, pos_target_hypos))
+        sum_loss = 0
+        sum_penalty = 0
+        for i in range(N):
+          pos_init, pos_target, duration, penalty = self._penalize_action(self._FIXED_POS_INIT, pos_target_hypos[i], self._FIXED_DURATION)
+          logger.log('{} test target position hypotheses suggested by current policy parameters. (sample = {}/{})'.format(prefix_info, i+1, N))
+          logger.log('{} launch test. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, pos_init, pos_target, duration))
+          entry = self._launch_test(saver_dataset, pos_init, pos_target, duration)
+          loc_land_i = float(entry['result']['loc_land'])
+          logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land_i, desired_loc_land_samples[i]))
+          sum_penalty += penalty
+          sum_loss += (desired_loc_land_samples[i] - loc_land_i)**2
+        ave_loss = sum_loss / (2 * N)
+        ave_penalty = sum_penalty / (2 * N)
+        final_loss = ave_loss + ave_penalty
+        logger.log('{} loss = {}, penalty = {}'.format(prefix_info, final_loss, ave_penalty))
+        logger.log('')
+        return final_loss
 
-    # define loss function
-    self._run_model_free_iteration = 0
-    def loss_func(params, desired_loc_land_samples, N):
-      logger.log('{} optimize policy parameters with CMA-ES. (iteration = {}, N = {})'.format(prefix_info, self._run_model_free_iteration, N))
-      self._run_model_free_iteration += 1
-      logger.log('{} sample from CMA-ES. (params = {})'.format(prefix_info, params))
-      pos_target_hypos = [policy_func(desired_loc_land_samples[i], params) for i in range(N)]
-      logger.log('{} generate hypo target positions. (hypos = {})'.format(prefix_info, pos_target_hypos))
-      sum_loss = 0
-      sum_penalty = 0
-      for i in range(N):
-        pos_init, pos_target, duration, penalty = self._penalize_action(self._FIXED_POS_INIT, pos_target_hypos[i], self._FIXED_DURATION)
-        logger.log('{} test target position hypotheses suggested by current policy parameters. (sample = {}/{})'.format(prefix_info, i+1, N))
-        logger.log('{} launch test. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, pos_init, pos_target, duration))
-        entry = self._launch_test(saver_dataset, pos_init, pos_target, duration)
-        loc_land_i = float(entry['result']['loc_land'])
-        logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land_i, desired_loc_land_samples[i]))
-        sum_penalty += penalty
-        sum_loss += (desired_loc_land_samples[i] - loc_land_i)**2
-      ave_loss = sum_loss / (2 * N)
-      ave_penalty = sum_penalty / (2 * N)
-      final_loss = ave_loss + ave_penalty
-      logger.log('{} loss = {}, penalty = {}'.format(prefix_info, final_loss, ave_penalty))
-      logger.log('')
-      return final_loss
-
-    # optimize policy parameters with CMA-ES
-    #init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0, full sampling
-    #init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, full sampling
-    init_guess = [3.84310955e-01, 1.07871025e-01, -5.57357436e-03, 1.17338141e-04] # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
-    init_var   = 0.00020 # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
-    res = cma.fmin(loss_func, init_guess, init_var, args=(desired_loc_land_samples, N), 
-                   popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
-    optimal_params = res[0]
-    #optimal_params = [3.84177005e-01,   1.07917544e-01,  -5.55294093e-03,   1.14927976e-04]
-    logger.log('{} result = {}'.format(prefix_info, res))
-    logger.log('{} optimal solution found. (params = {})'.format(prefix_info, optimal_params))
+      # optimize policy parameters with CMA-ES
+      if mf_operation == '1':
+        init_guess = [0.38544, 0.10898, -0.00605, 0.00015] # for duration = 0.10, pos_init = 0.0, full sampling
+        init_var   = 0.00100 # for duration = 0.10, pos_init = 0.0, full sampling
+      elif mf_operation == '2':
+        init_guess = [3.84310955e-01, 1.07871025e-01, -5.57357436e-03, 1.17338141e-04] # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
+        init_var   = 0.00020 # for duration = 0.10, pos_init = 0.0, ignore 12.5, 15.0 (keep 17.5)
+      else:
+        assert(False)
+      res = cma.fmin(loss_func, init_guess, init_var, args=(desired_loc_land_samples, N), 
+                    popsize=20, tolx=10e-6, verb_disp=False, verb_log=0)
+      optimal_params = res[0]
+      logger.log('{} result = {}'.format(prefix_info, res))
+      logger.log('{} optimal solution found. (params = {})'.format(prefix_info, optimal_params))
+    
+    elif mf_operation == '3':
+      logger.log('{} load pre-optimized policy parameters in complete sample space'.format(prefix_info))
+      optimal_params = [3.84207069e-01, 1.08050257e-01, -5.44212265e-03, 1.20992580e-04]
+      self._run_model_free_iteration = 577
+      logger.log('{} iterations = {}, optimal_params = {}'.format(prefix_info, self._run_model_free_iteration, optimal_params))
+    
+    elif mf_operation == '4':
+      logger.log('{} load pre-optimized policy parameters in touched sample space'.format(prefix_info))
+      optimal_params = [3.84177005e-01, 1.07917544e-01, -5.55294093e-03, 1.14927976e-04]
+      self._run_model_free_iteration = 961
+      logger.log('{} iterations = {}, optimal_params = {}'.format(prefix_info, self._run_model_free_iteration, optimal_params))
+    
+    else:
+      assert(False)
+    
     logger.log('')
-
-    # Query desired landing location
-    desired_loc_land_input = input('{} desired_loc_land = '.format(prefix_info)).strip().lower()
-    desired_loc_land = float(desired_loc_land_input)
-
-    # test policy parameters in true dynamics
-    logger.log('{} apply optimal policy parameters. (params = {})'.format(prefix_info, optimal_params))
-    pos_target_hypo = policy_func(desired_loc_land, optimal_params)
-    logger.log('{} predict action by parameterized policy. (desired_loc_land = {}, pos_target_hypo = {})'.format(prefix_info, desired_loc_land, pos_target_hypo))
-    logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION))
-    loc_land = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION)
-    logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+    
+    # Test desired landing locations
+    test_sample_desired_loc_land = [(0.0 + 1.25*i) for i in range(21)]
+    test_results = []
+    for i in range(len(test_sample_desired_loc_land)):
+      # Query desired landing location
+      desired_loc_land = test_sample_desired_loc_land[i]
+      
+      # test policy parameters in true dynamics
+      logger.log('{} apply optimal policy parameters. (params = {})'.format(prefix_info, optimal_params))
+      pos_target_hypo = policy_func(desired_loc_land, optimal_params)
+      logger.log('{} predict action by parameterized policy. (desired_loc_land = {}, pos_target_hypo = {})'.format(prefix_info, desired_loc_land, pos_target_hypo))
+      logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION))
+      loc_land = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_hypo, self._FIXED_DURATION)
+      logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+      
+      # Add to test results
+      entry = {
+        'approach': 'model-free, CMA-ES(policy)',
+        'desired_loc_land': float(desired_loc_land),
+        'loc_land': float(loc_land),
+        'pos_target': float(pos_target_hypo),
+        'preopt_samples': int(self._run_model_free_iteration * N),
+        'samples': int(0),
+        'preopt_simulations': int(0),
+        'simulations': int(0)
+      }
+      test_results.append(entry)
+    
+    # Estimate test results
+    self._estimate_test_results(test_results)
 
   def _run_hybrid(self):
     prefix = 'catapult_sim/model_hybrid'
