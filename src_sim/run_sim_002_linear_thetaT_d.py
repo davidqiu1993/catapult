@@ -50,7 +50,7 @@ class TCatapultLPLinearSim(object):
   Simulation catapult learning and planning agent in linear motion control.
   """
   
-  def __init__(self, catapult, abs_dirpath_data, abs_dirpath_model):
+  def __init__(self, catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log):
     super(TCatapultLPLinearSim, self).__init__()
     
     self._FIXED_POS_INIT = 0.0
@@ -63,6 +63,7 @@ class TCatapultLPLinearSim(object):
     
     self._abs_dirpath_data = abs_dirpath_data
     self._abs_dirpath_model = os.path.join(abs_dirpath_model, './')
+    self._abs_dirpath_log = abs_dirpath_log
 
     loader_dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data, auto_init=False)
     loader_dataset.load_dataset()
@@ -174,10 +175,10 @@ class TCatapultLPLinearSim(object):
       plt.figure(1)
       plt.clf()
       
-      plt.plot(plot_x_train, plot_y_train, 'ro')
-      plt.plot(plot_x_valid, plot_y_valid, 'g--')
-      plt.plot(plot_x_valid, plot_y_hypo,  'b-')
-      plt.errorbar(plot_x_valid, plot_y_hypo, plot_err_hypo, linestyle='None', marker='^')
+      plt.plot(plot_x_train, plot_y_train, 'bx')
+      #plt.plot(plot_x_valid, plot_y_valid, 'b--')
+      #plt.plot(plot_x_valid, plot_y_hypo,  'r-')
+      plt.errorbar(plot_x_valid, plot_y_hypo, plot_err_hypo, color='r', linestyle='-')
       plt.ylabel('y')
       plt.grid(True)
       
@@ -186,7 +187,55 @@ class TCatapultLPLinearSim(object):
     return ave_stderr_y, ave_stderr_err
 
   def _estimate_test_results(self, test_results):
-    pass
+    prefix = 'estimate_test_results'
+    prefix_info = prefix + ':'
+    
+    SHOULD_SAVE_TEST_RESULTS = True
+    
+    if SHOULD_SAVE_TEST_RESULTS:
+      filename_test_results = 'test_' + '{:%Y%m%d_%H%M%S_%f}'.format(datetime.datetime.now()) + '.yaml'
+      filepath_test_results = os.path.abspath(os.path.join(self._abs_dirpath_log, filename_test_results))
+      with open(filepath_test_results, 'w') as yaml_file:
+        yaml.dump(test_results, yaml_file, default_flow_style=False)
+      print('{} save test results. (path={})'.format(prefix_info, filepath_test_results))
+    
+    samples_actual_loc_land = []
+    samples_actual_pos_target = []
+    for entry in self._dataset:
+      samples_actual_loc_land.append(float(entry['result']['loc_land']))
+      samples_actual_pos_target.append(float(entry['action']['pos_target']))
+    
+    samples_test_desired_loc_land = []
+    samples_test_pos_target = []
+    samples_test_loc_land = []
+    for entry in test_results:
+      approach              = str(entry['approach'])
+      desired_loc_land      = float(entry['desired_loc_land'])
+      loc_land              = float(entry['loc_land'])
+      pos_target            = float(entry['pos_target'])
+      n_preopt_samples      = int(entry['preopt_samples'])
+      n_samples             = int(entry['samples'])
+      n_preopt_simulations  = int(entry['preopt_simulations'])
+      n_simulations         = int(entry['simulations'])
+      samples_test_desired_loc_land.append(desired_loc_land)
+      samples_test_pos_target.append(pos_target)
+      samples_test_loc_land.append(loc_land)
+    
+    plt.figure()
+    
+    plt.subplot(211)
+    plt.xlabel('d*')
+    plt.ylabel('thetaT')
+    plt.plot(samples_actual_loc_land, samples_actual_pos_target, 'bx')
+    plt.plot(samples_test_desired_loc_land, samples_test_pos_target, 'r-')
+    
+    plt.subplot(212)
+    plt.xlabel('d*')
+    plt.ylabel('d')
+    plt.plot(samples_actual_loc_land, samples_actual_loc_land, 'b-')
+    plt.plot(samples_test_desired_loc_land, samples_test_loc_land, 'ro')
+    
+    plt.show()
 
   def _run_model_based(self):
     prefix = 'catapult_sim/model_based'
@@ -212,9 +261,11 @@ class TCatapultLPLinearSim(object):
       self._train_model(model, x_train, y_train, batch_train=True)
     
     # Estimate model quality
+    x_valid = [x_train[i * 2] for i in range(int(len(x_train) / 2))]
+    y_valid = [y_train[i * 2] for i in range(int(len(y_train) / 2))]
     should_estimate_model_quality_input = input('{} estimate model quality (Y/n)?> '.format(prefix_info)).strip().lower()
     if should_estimate_model_quality_input in ['', 'y']:
-      ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_train, y_train, should_plot=True)
+      ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_valid, y_valid, should_plot=True)
       logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
     
     # Save model
@@ -226,52 +277,60 @@ class TCatapultLPLinearSim(object):
     # Test desired landing locations
     test_sample_desired_loc_land = [(0.0 + 1.25*i) for i in range(21)]
     test_results = []
-    for i in len(test_sample_desired_loc_land):
-      # Query desired landing location
-      desired_loc_land = test_sample_desired_loc_land[i]
-      
-      # Optimize parameters with CMA-ES
-      init_guess = [0.1, 0.1]
-      init_var   = 1.0
-      self._run_model_based_iteration = 0
-      def f(x):
-        logger.log('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
-        self._run_model_based_iteration += 1
-        pos_target, x_1 = x
-        logger.log('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
-        prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
-        loc_land_h    = (prediction.Y.ravel())[0]
-        loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
-        loc_land_grad = (prediction.Grad.ravel())[0]
-        loss = 0.5 * (desired_loc_land - loc_land_h)**2
-        logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
-        logger.log('')
-        return loss
-      res = cma.fmin(f, init_guess, init_var,
-                     bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
-                     popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
-      logger.log('{} result = {}'.format(prefix_info, res))
-      logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
-      optimal_pos_target = res[0][0]
-      logger.log('')
-      
-      # Test in true dynamics
-      logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
-      loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
-      logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+    for i in range(len(test_sample_desired_loc_land)):
+      has_finished_this_round = False
+      while not has_finished_this_round:
+        try:
+          # Query desired landing location
+          desired_loc_land = test_sample_desired_loc_land[i]
+          
+          # Optimize parameters with CMA-ES
+          init_guess = [0.1, 0.1]
+          init_var   = 1.0
+          self._run_model_based_iteration = 0
+          def f(x):
+            logger.log('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
+            self._run_model_based_iteration += 1
+            pos_target, x_1 = x
+            logger.log('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
+            prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+            loc_land_h    = (prediction.Y.ravel())[0]
+            loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+            loc_land_grad = (prediction.Grad.ravel())[0]
+            loss = 0.5 * (desired_loc_land - loc_land_h)**2
+            logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
+            logger.log('')
+            return loss
+          res = cma.fmin(f, init_guess, init_var,
+                        bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
+                        popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
+          logger.log('{} result = {}'.format(prefix_info, res))
+          logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
+          optimal_pos_target = res[0][0]
+          logger.log('')
+          
+          # Test in true dynamics
+          logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
+          loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
+          logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
 
-      # Add to test results
-      test_result = {
-        'approach': 'model-based, CMA-ES(action)',
-        'desired_loc_land': desired_loc_land,
-        'loc_land': loc_land,
-        'pos_target': optimal_pos_target,
-        'preopt_samples': len(self._dataset),
-        'samples': 0,
-        'preopt_simulations': 0,
-        'simulations': self._run_model_based_iteration
-      }
-      test_results.append(test_result)
+          # Add to test results
+          entry = {
+            'approach': 'model-based, CMA-ES(action)',
+            'desired_loc_land': float(desired_loc_land),
+            'loc_land': float(loc_land),
+            'pos_target': float(optimal_pos_target),
+            'preopt_samples': int(len(self._dataset)),
+            'samples': int(0),
+            'preopt_simulations': int(0),
+            'simulations': int(self._run_model_based_iteration)
+          }
+          test_results.append(entry)
+          
+          has_finished_this_round = True
+        
+        except:
+          has_finished_this_round = False
 
     # Estimate test results
     self._estimate_test_results(test_results)
@@ -427,9 +486,11 @@ class TCatapultLPLinearSim(object):
       self._train_model(model, x_train, y_train, batch_train=True)
     
     # Estimate model quality
+    x_valid = [x_train[i * 2] for i in range(int(len(x_train) / 2))]
+    y_valid = [y_train[i * 2] for i in range(int(len(y_train) / 2))]
     should_estimate_model_quality_input = input('{} estimate model quality (Y/n)?> '.format(prefix_info)).strip().lower()
     if should_estimate_model_quality_input in ['', 'y']:
-      ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_train, y_train, should_plot=True)
+      ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_valid, y_valid, should_plot=True)
       logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
     
     # Save model
@@ -559,7 +620,8 @@ if __name__ == '__main__':
   
   abs_dirpath_data = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/catapult_' + catapult_name))
   abs_dirpath_model = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/model_' + catapult_name))
-  agent = TCatapultLPLinearSim(catapult, abs_dirpath_data, abs_dirpath_model)
+  abs_dirpath_log = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/log_' + catapult_name))
+  agent = TCatapultLPLinearSim(catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log)
   
   operation = 'mb'
   if len(sys.argv) >= 2:
