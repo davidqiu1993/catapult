@@ -227,7 +227,7 @@ class TCatapultLPLinearSim(object):
     plt.xlabel('d*')
     plt.ylabel('thetaT')
     plt.plot(samples_actual_loc_land, samples_actual_pos_target, 'bx')
-    plt.plot(samples_test_desired_loc_land, samples_test_pos_target, 'r-')
+    plt.plot(samples_test_desired_loc_land, samples_test_pos_target, 'ro')
     
     plt.subplot(212)
     plt.xlabel('d*')
@@ -643,6 +643,7 @@ class TCatapultLPLinearSim(object):
       # optimize action with model by CMA-ES
       mb_action_init_guess = [optimal_inital_action, 0.1]
       mb_action_init_var   = 0.75 * math.pi * abs(desired_loc_land - eval_loc_land_h) / 25.0
+      pdb.set_trace()
       self._run_hybrid_mb_action_iteration = 0
       def mb_action_loss_func(x):
         logger.log('{} optimization with model by CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_hybrid_mb_action_iteration, desired_loc_land))
