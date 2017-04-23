@@ -380,9 +380,9 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/same_throw'
     prefix_info = prefix + ':'
     
-    pos_init   = 0.0 * math.pi
-    pos_target = 0.6 * math.pi
-    duration   = 0.10
+    pos_init   = self.catapult.POS_MIN
+    pos_target = self.catapult.POS_MAX
+    duration   = self.catapult.DURATION_MIN
     
     print('{} pos_init = {}, pos_target = {}, duration = {}'.format(prefix_info, pos_init, pos_target, duration))
     
