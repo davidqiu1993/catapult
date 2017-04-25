@@ -61,9 +61,9 @@ class TCatapultLPLinearSim(object):
     dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data)
     
     feature_dict = {
-      'pos_init': [0.0], #np.array([(0.0 + i*0.05) for i in range(11)]) * math.pi,
-      'pos_target': np.array([(0.0 + i*0.0025) for i in range(301)]) * math.pi, #np.array([(0.0 + i*0.05) for i in range(16)]) * math.pi,
-      'duration': [0.10], #[(0.05 + i*0.025) for i in range(23)]
+      'pos_init': [0.0],
+      'pos_target': np.array([(0.75 + i*0.0025) for i in range(int((0.95-0.75) / 0.0025) + 1)]) * math.pi,
+      'duration': [0.50]
     }
     
     feature_space = []
@@ -459,7 +459,7 @@ class TCatapultLPLinearSim(object):
 
 if __name__ == '__main__':
   dirpath_sim = '../../ode/simpleode/catapult'
-  catapult_name = 'catapult_sim_001'
+  catapult_name = 'catapult_sim_002'
 
   catapult = TCatapultSim(dirpath_sim)
   
