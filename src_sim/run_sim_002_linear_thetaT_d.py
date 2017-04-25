@@ -635,6 +635,8 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/model_free_nn'
     prefix_info = prefix + ':'
     
+    EPSILON = 0.01
+    
     # define policy network
     model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
     
@@ -673,12 +675,19 @@ class TCatapultLPLinearSim(object):
           if pos_target_h > self.catapult.POS_MAX: pos_target_h = self.catapult.POS_MAX
           logger.log('{} Fix action. (pos_target_h = {})'.format(prefix_info, pos_target_h))
           
+          # Add randomness to action
+          pos_target_h = pos_target_h + float((self.catapult.POS_MAX - self.catapult.POS_MIN) * (np.random.sample() - 0.5) * 2.0 * EPSILON)
+          if pos_target_h < self.catapult.POS_MIN: pos_target_h = self.catapult.POS_MIN
+          if pos_target_h > self.catapult.POS_MAX: pos_target_h = self.catapult.POS_MAX
+          logger.log('{} Randomize action. (pos_target_h = {})'.format(prefix_info, pos_target_h))
+          
           # Test in true dynamics
           logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_h, self._FIXED_DURATION))
           loc_land = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_h, self._FIXED_DURATION)
           logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
           
           # Update model samples
+          logger.log('{} train policy network samples. (loc_land = {}, pos_target = {})'.format(prefix_info, loc_land, pos_target_h))
           x_train.append([loc_land])
           y_train.append([pos_target_h])
           model_policy.Update([loc_land], [pos_target_h], not_learn=False)
