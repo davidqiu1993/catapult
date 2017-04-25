@@ -53,13 +53,13 @@ class TCatapultLPLinearSim(object):
   def __init__(self, catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log):
     super(TCatapultLPLinearSim, self).__init__()
     
-    self._FIXED_POS_INIT = 0.0
-    self._FIXED_DURATION = 0.10
-
+    self.catapult = catapult
+    
+    self._FIXED_POS_INIT = self.catapult.POS_MIN
+    self._FIXED_DURATION = self.catapult.DURATION_MIN
+    
     self._SHOULD_LOAD_MODEL = False
     self._SHOULD_SAVE_MODEL = False
-
-    self.catapult = catapult
     
     self._abs_dirpath_data = abs_dirpath_data
     self._abs_dirpath_model = os.path.join(abs_dirpath_model, './')
@@ -186,13 +186,11 @@ class TCatapultLPLinearSim(object):
     
     return ave_stderr_y, ave_stderr_err
 
-  def _estimate_test_results(self, test_results):
+  def _estimate_test_results(self, test_results, should_save=True):
     prefix = 'estimate_test_results'
     prefix_info = prefix + ':'
     
-    SHOULD_SAVE_TEST_RESULTS = True
-    
-    if SHOULD_SAVE_TEST_RESULTS:
+    if should_save:
       filename_test_results = 'test_' + '{:%Y%m%d_%H%M%S_%f}'.format(datetime.datetime.now()) + '.yaml'
       filepath_test_results = os.path.abspath(os.path.join(self._abs_dirpath_log, filename_test_results))
       with open(filepath_test_results, 'w') as yaml_file:
@@ -249,7 +247,7 @@ class TCatapultLPLinearSim(object):
     else:
       should_train_model = False
     should_load_model = (not should_train_model)
-    model = self._create_model(1, 1, hiddens=[200, 200], max_updates=40000, should_load_model=should_load_model, prefix_info=prefix_info)
+    model = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=should_load_model, prefix_info=prefix_info)
     
     # Train model
     x_train = []
@@ -275,7 +273,7 @@ class TCatapultLPLinearSim(object):
         self._save_model(model, prefix_info)
     
     # Test desired landing locations
-    test_sample_desired_loc_land = [(0.0 + 1.25*i) for i in range(21)]
+    test_sample_desired_loc_land = [(0.0 + 2.5*i) for i in range(42)]
     test_results = []
     for i in range(len(test_sample_desired_loc_land)):
       has_finished_this_round = False
@@ -334,6 +332,103 @@ class TCatapultLPLinearSim(object):
 
     # Estimate test results
     self._estimate_test_results(test_results)
+  
+  def _run_model_based_online(self):
+    """
+    Model-based:
+      - online
+      - model(dynamics)
+      - CMA-ES(action)
+    """
+    prefix = 'catapult_sim/model_based_online'
+    prefix_info = prefix + ':'
+    
+    # Create model (and train/load)
+    model = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
+    
+    # Load validation dataset
+    x_valid = []
+    y_valid = []
+    for i in range(len(self._dataset)):
+      if i % 3 == 0:
+        entry = self._dataset[i]
+        x_valid.append([entry['action']['pos_target']])
+        y_valid.append([entry['result']['loc_land']])
+    
+    # Online dataset
+    x_train = []
+    y_train = []
+    
+    # Test desired landing locations
+    test_sample_desired_loc_land = [float(0.0 + np.random.sample() * 100.0) for i in range(100)]
+    test_results = []
+    for i in range(len(test_sample_desired_loc_land)):
+      has_finished_this_round = False
+      while not has_finished_this_round:
+        try:
+          # Query desired landing location
+          desired_loc_land = test_sample_desired_loc_land[i]
+          
+          # Optimize parameters with CMA-ES
+          init_guess = [0.1, 0.1]
+          init_var   = 1.0
+          self._run_model_based_iteration = 0
+          def f(x):
+            logger.log('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
+            self._run_model_based_iteration += 1
+            pos_target, x_1 = x
+            logger.log('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
+            prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+            loc_land_h    = (prediction.Y.ravel())[0]
+            loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+            loc_land_grad = (prediction.Grad.ravel())[0]
+            loss = 0.5 * (desired_loc_land - loc_land_h)**2
+            logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
+            logger.log('')
+            return loss
+          res = cma.fmin(f, init_guess, init_var,
+                        bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
+                        popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
+          logger.log('{} result = {}'.format(prefix_info, res))
+          logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
+          optimal_pos_target = res[0][0]
+          logger.log('')
+          
+          # Test in true dynamics
+          logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
+          loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
+          logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+          
+          # Add to test results
+          entry = {
+            'approach': 'online, model-based, CMA-ES(action)',
+            'desired_loc_land': float(desired_loc_land),
+            'loc_land': float(loc_land),
+            'pos_target': float(optimal_pos_target),
+            'preopt_samples': int(0),
+            'samples': int(i),
+            'preopt_simulations': int(0),
+            'simulations': int(self._run_model_based_iteration)
+          }
+          test_results.append(entry)
+          
+          # Update model samples
+          x_train.append([optimal_pos_target])
+          y_train.append([loc_land])
+          model.Update([optimal_pos_target], [loc_land], not_learn=False)
+          
+          # Estimate model quality
+          ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_valid, y_valid, should_plot=False)
+          logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
+          time.sleep(2.0)
+          
+          has_finished_this_round = True
+        
+        except:
+          has_finished_this_round = False
+
+    # Estimate test results
+    self._estimate_test_results(test_results, should_save=True)
   
   def _penalize_action(self, pos_init, pos_target, duration):
     prefix = 'catapult_sim/penalize_action'
@@ -643,7 +738,6 @@ class TCatapultLPLinearSim(object):
       # optimize action with model by CMA-ES
       mb_action_init_guess = [optimal_inital_action, 0.1]
       mb_action_init_var   = 0.75 * math.pi * abs(desired_loc_land - eval_loc_land_h) / 25.0
-      pdb.set_trace()
       self._run_hybrid_mb_action_iteration = 0
       def mb_action_loss_func(x):
         logger.log('{} optimization with model by CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_hybrid_mb_action_iteration, desired_loc_land))
@@ -692,10 +786,14 @@ class TCatapultLPLinearSim(object):
     
     # Estimate test results
     self._estimate_test_results(test_results)
-
+  
+  def _run_hybrid_online(self):
+    pass
+  
   def getOperations(self):
     operation_dict = {
       'mb': self._run_model_based,
+      'mb_online': self._run_model_based_online,
       'mf': self._run_model_free,
       'hybrid': self._run_hybrid
     }
@@ -714,7 +812,7 @@ class TCatapultLPLinearSim(object):
 
 if __name__ == '__main__':
   dirpath_sim = '../../ode/simpleode/catapult'
-  catapult_name = 'sim_001_01'
+  catapult_name = 'sim_002_01'
 
   catapult = TCatapultSim(dirpath_sim)
   
