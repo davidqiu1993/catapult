@@ -913,19 +913,30 @@ class TCatapultLPLinearSim(object):
     model_dynamics = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
     model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
     
+    # Load dynamics validation dataset
+    x_valid_dynamics = []
+    y_valid_dynamics = []
+    for entry in self._dataset:
+      x_valid_dynamics.append([entry['action']['pos_target']])
+      y_valid_dynamics.append([entry['result']['loc_land']])
+    
+    # Load policy validation dataset
+    x_valid_policy = []
+    y_valid_policy = []
+    for entry in self._dataset:
+      x_valid_policy.append([entry['result']['loc_land']])
+      y_valid_policy.append([entry['action']['pos_target']])
+    
+    # Online dynamics dataset
+    x_train_dynamics = []
+    y_train_dynamics = []
+    
+    # Online policy dataset
+    x_train_policy = []
+    y_train_policy = []
+    
     #TODO
     """
-    # Load validation dataset
-    x_valid = []
-    y_valid = []
-    for entry in self._dataset:
-      x_valid.append([entry['action']['pos_target']])
-      y_valid.append([entry['result']['loc_land']])
-    
-    # Online dataset
-    x_train = []
-    y_train = []
-    
     # Test desired landing locations
     test_sample_desired_loc_land = [float(0.0 + np.random.sample() * 100.0) for i in range(100)]
     test_results = []
