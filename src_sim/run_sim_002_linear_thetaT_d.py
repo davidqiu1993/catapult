@@ -236,6 +236,12 @@ class TCatapultLPLinearSim(object):
     plt.show()
 
   def _run_model_based(self):
+    """
+    model-based:
+      - offline
+      - NN(dynamics)
+      - CMA-ES(action)
+    """
     prefix = 'catapult_sim/model_based'
     prefix_info = prefix + ':'
     
@@ -314,7 +320,7 @@ class TCatapultLPLinearSim(object):
 
           # Add to test results
           entry = {
-            'approach': 'model-based, CMA-ES(action)',
+            'approach': 'model-based, offline, NN(dynamics), CMA-ES(action)',
             'desired_loc_land': float(desired_loc_land),
             'loc_land': float(loc_land),
             'pos_target': float(optimal_pos_target),
@@ -337,13 +343,13 @@ class TCatapultLPLinearSim(object):
     """
     Model-based:
       - online
-      - model(dynamics)
+      - NN(dynamics)
       - CMA-ES(action)
     """
     prefix = 'catapult_sim/model_based_online'
     prefix_info = prefix + ':'
     
-    # Create model (and train/load)
+    # Create model
     model = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
     
     # Load validation dataset
@@ -399,19 +405,6 @@ class TCatapultLPLinearSim(object):
           loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
           logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
           
-          # Add to test results
-          entry = {
-            'approach': 'online, model-based, CMA-ES(action)',
-            'desired_loc_land': float(desired_loc_land),
-            'loc_land': float(loc_land),
-            'pos_target': float(optimal_pos_target),
-            'preopt_samples': int(0),
-            'samples': int(i),
-            'preopt_simulations': int(0),
-            'simulations': int(self._run_model_based_iteration)
-          }
-          test_results.append(entry)
-          
           # Update model samples
           x_train.append([optimal_pos_target])
           y_train.append([loc_land])
@@ -421,6 +414,21 @@ class TCatapultLPLinearSim(object):
           ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_valid, y_valid, should_plot=False)
           logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
           time.sleep(2.0)
+          
+          # Add to test results
+          entry = {
+            'approach': 'model-based, online, NN(dynamics), CMA-ES(action)',
+            'desired_loc_land': float(desired_loc_land),
+            'loc_land': float(loc_land),
+            'pos_target': float(optimal_pos_target),
+            'preopt_samples': int(0),
+            'samples': int(i),
+            'preopt_simulations': int(0),
+            'simulations': int(self._run_model_based_iteration),
+            'model_ave_stderr_y': ave_stderr_y,
+            'model_ave_stderr_err': ave_stderr_err
+          }
+          test_results.append(entry)
           
           has_finished_this_round = True
         
@@ -485,6 +493,12 @@ class TCatapultLPLinearSim(object):
     return entry
   
   def _run_model_free(self):
+    """
+    model-free:
+      - online
+      - CMA-ES(policy; cubic)
+      - policy(action)
+    """
     prefix = 'catapult_sim/model_free'
     prefix_info = prefix + ':'
     
@@ -597,7 +611,7 @@ class TCatapultLPLinearSim(object):
       
       # Add to test results
       entry = {
-        'approach': 'model-free, CMA-ES(policy)',
+        'approach': 'model-free, online, CMA-ES(policy; cubic), policy(action)',
         'desired_loc_land': float(desired_loc_land),
         'loc_land': float(loc_land),
         'pos_target': float(pos_target_hypo),
@@ -610,6 +624,92 @@ class TCatapultLPLinearSim(object):
     
     # Estimate test results
     self._estimate_test_results(test_results)
+  
+  def _run_model_free_nn(self):
+    """
+    model-free:
+      - online
+      - NN(policy; deterministic)
+      - policy(action)
+    """
+    prefix = 'catapult_sim/model_free_nn'
+    prefix_info = prefix + ':'
+    
+    # define policy network
+    model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
+    
+    # Load validation dataset
+    x_valid = []
+    y_valid = []
+    for i in range(len(self._dataset)):
+      if i % 3 == 0:
+        entry = self._dataset[i]
+        x_valid.append([entry['result']['loc_land']])
+        y_valid.append([entry['action']['pos_target']])
+    
+    # Online dataset
+    x_train = []
+    y_train = []
+    
+    # Test desired landing locations
+    test_sample_desired_loc_land = [float(0.0 + np.random.sample() * 100.0) for i in range(100)]
+    test_results = []
+    for i in range(len(test_sample_desired_loc_land)):
+      has_finished_this_round = False
+      while not has_finished_this_round:
+        try:
+          # Query desired landing location
+          desired_loc_land = test_sample_desired_loc_land[i]
+          
+          # Predict from policy network
+          prediction = model_policy.Predict([desired_loc_land], x_var=0.0**2, with_var=True, with_grad=True)
+          pos_target_h    = (prediction.Y.ravel())[0]
+          pos_target_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+          pos_target_grad = (prediction.Grad.ravel())[0]
+          logger.log('{} Predict from policy network. (desired_loc_land = {}, pos_target_h = {}, pos_target_err = {})'.format(prefix_info, desired_loc_land, pos_target_h, pos_target_err))
+          
+          # Fix action
+          if pos_target_h < self.catapult.POS_MIN: pos_target_h = self.catapult.POS_MIN
+          if pos_target_h > self.catapult.POS_MAX: pos_target_h = self.catapult.POS_MAX
+          logger.log('{} Fix action. (pos_target_h = {})'.format(prefix_info, pos_target_h))
+          
+          # Test in true dynamics
+          logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_h, self._FIXED_DURATION))
+          loc_land = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_h, self._FIXED_DURATION)
+          logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+          
+          # Update model samples
+          x_train.append([loc_land])
+          y_train.append([pos_target_h])
+          model_policy.Update([loc_land], [pos_target_h], not_learn=False)
+          
+          # Estimate model quality
+          ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model_policy, x_train, y_train, x_valid, y_valid, should_plot=False)
+          logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
+          time.sleep(2.0)
+          
+          # Add to test results
+          entry = {
+            'approach': 'model-based, online, NN(dynamics), CMA-ES(action)',
+            'desired_loc_land': float(desired_loc_land),
+            'loc_land': float(loc_land),
+            'pos_target': float(pos_target_h),
+            'preopt_samples': int(0),
+            'samples': int(i),
+            'preopt_simulations': int(0),
+            'simulations': int(0),
+            'policy_nn_ave_stderr_y': ave_stderr_y,
+            'policy_nn_ave_stderr_err': ave_stderr_err
+          }
+          test_results.append(entry)
+          
+          has_finished_this_round = True
+        
+        except:
+          has_finished_this_round = False
+
+    # Estimate test results
+    self._estimate_test_results(test_results, should_save=True)
 
   def _run_hybrid(self):
     prefix = 'catapult_sim/model_hybrid'
@@ -788,13 +888,114 @@ class TCatapultLPLinearSim(object):
     self._estimate_test_results(test_results)
   
   def _run_hybrid_online(self):
-    pass
+    """
+    hybrid:
+      - online
+      - model(dynamics)
+      - model(policy; deterministic)
+      - policy(init_action)
+      - CMA-ES(action; init_action)
+      - [model-based]
+    """
+    prefix = 'catapult_sim/hybrid_online'
+    prefix_info = prefix + ':'
+    
+    # Create models
+    model_dynamics = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
+    model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
+    
+    #TODO
+    """
+    # Load validation dataset
+    x_valid = []
+    y_valid = []
+    for entry in self._dataset:
+      x_valid.append([entry['action']['pos_target']])
+      y_valid.append([entry['result']['loc_land']])
+    
+    # Online dataset
+    x_train = []
+    y_train = []
+    
+    # Test desired landing locations
+    test_sample_desired_loc_land = [float(0.0 + np.random.sample() * 100.0) for i in range(100)]
+    test_results = []
+    for i in range(len(test_sample_desired_loc_land)):
+      has_finished_this_round = False
+      while not has_finished_this_round:
+        try:
+          # Query desired landing location
+          desired_loc_land = test_sample_desired_loc_land[i]
+          
+          # Optimize parameters with CMA-ES
+          init_guess = [0.1, 0.1]
+          init_var   = 1.0
+          self._run_model_based_iteration = 0
+          def f(x):
+            logger.log('{} optimization with CMA-ES. (iteration = {}, desired_loc_land = {})'.format(prefix_info, self._run_model_based_iteration, desired_loc_land))
+            self._run_model_based_iteration += 1
+            pos_target, x_1 = x
+            logger.log('{} sample from CMA-ES. (pos_target = {})'.format(prefix_info, pos_target))
+            prediction = model.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+            loc_land_h    = (prediction.Y.ravel())[0]
+            loc_land_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+            loc_land_grad = (prediction.Grad.ravel())[0]
+            loss = 0.5 * (desired_loc_land - loc_land_h)**2
+            logger.log('{} loss = {}, loc_land_h = {}, loc_land_err = {}'.format(prefix_info, loss, loc_land_h, loc_land_err))
+            logger.log('')
+            return loss
+          res = cma.fmin(f, init_guess, init_var,
+                        bounds=[[self.catapult.POS_MIN, self.catapult.POS_MIN], [self.catapult.POS_MAX, self.catapult.POS_MAX]], 
+                        popsize=20, tolx=0.0001, verb_disp=False, verb_log=0)
+          logger.log('{} result = {}'.format(prefix_info, res))
+          logger.log('{} optimal solution found. (pos_target = {}, pos_init === {}, duration === {})'.format(prefix_info, res[0][0], self._FIXED_POS_INIT, self._FIXED_DURATION))
+          optimal_pos_target = res[0][0]
+          logger.log('')
+          
+          # Test in true dynamics
+          logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION))
+          loc_land = catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
+          logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+          
+          # Update model samples
+          x_train.append([optimal_pos_target])
+          y_train.append([loc_land])
+          model.Update([optimal_pos_target], [loc_land], not_learn=False)
+          
+          # Estimate model quality
+          ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model, x_train, y_train, x_valid, y_valid, should_plot=False)
+          logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
+          
+          # Add to test results
+          entry = {
+            'approach': 'online, model-based, CMA-ES(action)',
+            'desired_loc_land': float(desired_loc_land),
+            'loc_land': float(loc_land),
+            'pos_target': float(optimal_pos_target),
+            'preopt_samples': int(0),
+            'samples': int(i),
+            'preopt_simulations': int(0),
+            'simulations': int(self._run_model_based_iteration),
+            'model_ave_stderr_y': ave_stderr_y,
+            'model_ave_stderr_err': ave_stderr_err
+          }
+          test_results.append(entry)
+          
+          has_finished_this_round = True
+        
+        except:
+          has_finished_this_round = False
+
+    # Estimate test results
+    self._estimate_test_results(test_results, should_save=True)
+    """
   
   def getOperations(self):
     operation_dict = {
       'mb': self._run_model_based,
       'mb_online': self._run_model_based_online,
       'mf': self._run_model_free,
+      'mf_nn': self._run_model_free_nn,
       'hybrid': self._run_hybrid
     }
     return operation_dict
@@ -811,7 +1012,7 @@ class TCatapultLPLinearSim(object):
 
 
 if __name__ == '__main__':
-  dirpath_sim = '../../ode/simpleode/catapult'
+  dirpath_sim = '../../ode/simpleode/catapult_copy2'
   catapult_name = 'sim_002_01'
 
   catapult = TCatapultSim(dirpath_sim)
