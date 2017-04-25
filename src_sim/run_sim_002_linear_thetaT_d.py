@@ -184,7 +184,7 @@ class TCatapultLPLinearSim(object):
       
       plt.show()
     
-    return ave_stderr_y, ave_stderr_err
+    return float(ave_stderr_y), float(ave_stderr_err)
 
   def _estimate_test_results(self, test_results, should_save=True):
     prefix = 'estimate_test_results'
