@@ -998,7 +998,7 @@ class TCatapultLPLinearSim(object):
       
       # Add to test results
       entry = {
-        'approach': 'hybrid, CMA-ES(policy; model), CMA-ES(action; model, policy(init_action))',
+        'approach': 'hybrid, online, NN(dynamics), CMA-ES(policy; cubic, NN(dynamics)), policy(init_action), CMA-ES(action; NN(dynamics), init_action, var~err)',
         'desired_loc_land': float(desired_loc_land),
         'loc_land': float(loc_land),
         'pos_target': float(mb_action_optimal_pos_target),
