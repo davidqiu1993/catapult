@@ -1179,7 +1179,7 @@ class TCatapultLPLinearSim(object):
 
       # Add to test results
       entry = {
-        'approach': 'offline, NN(policy; deterministic), NN(dynamics), policy(init_action), CMA-ES(action; init_action, var~err), [model-based(action) if err>threshold]',
+        'approach': 'hybrid, offline, NN(policy; deterministic), NN(dynamics), policy(init_action), CMA-ES(action; init_action, var~err), [model-based(action) if err>threshold]',
         'desired_loc_land': float(desired_loc_land),
         'loc_land': float(loc_land),
         'pos_target': float(optimal_pos_target),
