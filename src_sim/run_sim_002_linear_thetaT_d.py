@@ -101,12 +101,8 @@ class TCatapultLPLinearSim(object):
     
     return model
 
-  def _train_model(self, model, x_train, y_train, batch_train=True):
-    if batch_train:
-      model.UpdateBatch(x_train, y_train)
-    else:
-      for x, y, n in zip(x_train, y_train, range(len(x_train))):
-        model.Update(x, y, not_learn=((n+1) % min(10, len(x_train)) != 0))
+  def _train_model(self, model, x_train, y_train):
+    model.UpdateBatch(x_train, y_train)
   
   def _save_model(self, model, prefix_info):
     logger.log('{} save mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
@@ -262,7 +258,7 @@ class TCatapultLPLinearSim(object):
       x_train.append([entry['action']['pos_target']])
       y_train.append([entry['result']['loc_land']])
     if not should_load_model:
-      self._train_model(model, x_train, y_train, batch_train=True)
+      self._train_model(model, x_train, y_train)
     
     # Estimate model quality
     x_valid = [x_train[i * 2] for i in range(int(len(x_train) / 2))]
@@ -330,6 +326,8 @@ class TCatapultLPLinearSim(object):
             'simulations': int(self._run_model_based_iteration)
           }
           test_results.append(entry)
+          print('{} test result added to temperary result dataset >>> '.format(prefix_info))
+          print(entry)
           
           has_finished_this_round = True
         
@@ -429,6 +427,8 @@ class TCatapultLPLinearSim(object):
             'model_ave_stderr_err': ave_stderr_err
           }
           test_results.append(entry)
+          print('{} test result added to temperary result dataset >>> '.format(prefix_info))
+          print(entry)
           
           has_finished_this_round = True
         
@@ -621,6 +621,8 @@ class TCatapultLPLinearSim(object):
         'simulations': int(0)
       }
       test_results.append(entry)
+      print('{} test result added to temperary result dataset >>> '.format(prefix_info))
+      print(entry)
     
     # Estimate test results
     self._estimate_test_results(test_results)
@@ -707,10 +709,12 @@ class TCatapultLPLinearSim(object):
             'samples': int(i),
             'preopt_simulations': int(0),
             'simulations': int(0),
-            'policy_nn_ave_stderr_y': ave_stderr_y,
-            'policy_nn_ave_stderr_err': ave_stderr_err
+            'policy_nn_ave_stderr_y': float(ave_stderr_y),
+            'policy_nn_ave_stderr_err': float(ave_stderr_err)
           }
           test_results.append(entry)
+          print('{} test result added to temperary result dataset >>> '.format(prefix_info))
+          print(entry)
           
           has_finished_this_round = True
         
@@ -719,7 +723,106 @@ class TCatapultLPLinearSim(object):
 
     # Estimate test results
     self._estimate_test_results(test_results, should_save=True)
+  
+  def _run_model_free_nn_offline(self):
+    """
+    model-free:
+      - offline
+      - NN(policy; deterministic)
+      - policy(action)
+    """
+    prefix = 'catapult_sim/model_free_nn_offline'
+    prefix_info = prefix + ':'
+    
+    # Create policy network (and train/load)
+    should_train_model = True
+    should_train_model_input = input('{} train policy network rather than load from model file (Y/n)?> '.format(prefix_info)).strip().lower()
+    if should_train_model_input in ['', 'y']:
+      should_train_model = True
+    else:
+      should_train_model = False
+    should_load_model = (not should_train_model)
+    model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=should_load_model, prefix_info=prefix_info)
+    
+    # Train policy network
+    x_train = []
+    y_train = []
+    for i in range(len(self._dataset)):
+      entry = self._dataset[i]
+      x_train.append([entry['result']['loc_land']])
+      y_train.append([entry['action']['pos_target']])
+    if should_train_model:
+      self._train_model(model_policy, x_train, y_train)
+    
+    # Estimate model quality
+    x_valid = []
+    y_valid = []
+    for i in range(len(self._dataset)):
+      if i % 3 == 0:
+        entry = self._dataset[i]
+        x_valid.append([entry['result']['loc_land']])
+        y_valid.append([entry['action']['pos_target']])
+    should_estimate_model_quality_input = input('{} estimate policy network quality (Y/n)?> '.format(prefix_info)).strip().lower()
+    if should_estimate_model_quality_input in ['', 'y']:
+      ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model_policy, x_train, y_train, x_valid, y_valid, should_plot=True)
+      logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
+    
+    # Save policy network
+    if not should_load_model:
+      should_save_model_input = input('{} save policy network (Y/n)?> '.format(prefix_info)).strip().lower()
+      if should_save_model_input in ['', 'y']:
+        self._save_model(model_policy, prefix_info)
+    
+    # Test desired landing locations
+    test_sample_desired_loc_land = [(0.0 + 2.5*i) for i in range(42)]
+    test_results = []
+    for i in range(len(test_sample_desired_loc_land)):
+      has_finished_this_round = False
+      while not has_finished_this_round:
+        try:
+          # Query desired landing location
+          desired_loc_land = test_sample_desired_loc_land[i]
+          
+          # Predict from policy network
+          prediction = model_policy.Predict([desired_loc_land], x_var=0.0**2, with_var=True, with_grad=True)
+          pos_target_h    = (prediction.Y.ravel())[0]
+          pos_target_err  = (np.sqrt(np.diag(prediction.Var)))[0]
+          pos_target_grad = (prediction.Grad.ravel())[0]
+          logger.log('{} Predict from policy network. (desired_loc_land = {}, pos_target_h = {}, pos_target_err = {})'.format(prefix_info, desired_loc_land, pos_target_h, pos_target_err))
+          
+          # Fix action
+          if pos_target_h < self.catapult.POS_MIN: pos_target_h = self.catapult.POS_MIN
+          if pos_target_h > self.catapult.POS_MAX: pos_target_h = self.catapult.POS_MAX
+          logger.log('{} Fix action. (pos_target_h = {})'.format(prefix_info, pos_target_h))
+          
+          # Test in true dynamics
+          logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_h, self._FIXED_DURATION))
+          loc_land = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_h, self._FIXED_DURATION)
+          logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
+          
+          # Add to test results
+          entry = {
+            'approach': 'model-based, online, NN(dynamics), CMA-ES(action)',
+            'desired_loc_land': float(desired_loc_land),
+            'loc_land': float(loc_land),
+            'pos_target': float(pos_target_h),
+            'preopt_samples': int(len(x_train)),
+            'samples': int(0),
+            'preopt_simulations': int(0),
+            'simulations': int(0)
+          }
+          test_results.append(entry)
+          print('{} test result added to temperary result dataset >>> '.format(prefix_info))
+          print(entry)
+          
+          has_finished_this_round = True
+        
+        except:
+          has_finished_this_round = False
 
+    # Estimate test results
+    self._estimate_test_results(test_results, should_save=True)
+  
   def _run_hybrid(self):
     prefix = 'catapult_sim/model_hybrid'
     prefix_info = prefix + ':'
@@ -749,7 +852,7 @@ class TCatapultLPLinearSim(object):
       x_train.append([entry['action']['pos_target']])
       y_train.append([entry['result']['loc_land']])
     if not should_load_model:
-      self._train_model(model, x_train, y_train, batch_train=True)
+      self._train_model(model, x_train, y_train)
     
     # estimate model quality
     x_valid = [x_train[i * 2] for i in range(int(len(x_train) / 2))]
@@ -892,6 +995,8 @@ class TCatapultLPLinearSim(object):
         'simulations': int(self._run_hybrid_mb_action_iteration)
       }
       test_results.append(entry)
+      print('{} test result added to temperary result dataset >>> '.format(prefix_info))
+      print(entry)
     
     # Estimate test results
     self._estimate_test_results(test_results)
@@ -1016,6 +1121,7 @@ class TCatapultLPLinearSim(object):
       'mb_online': self._run_model_based_online,
       'mf': self._run_model_free,
       'mf_nn': self._run_model_free_nn,
+      'mf_nn_offline': self._run_model_free_nn_offline,
       'hybrid': self._run_hybrid
     }
     return operation_dict
