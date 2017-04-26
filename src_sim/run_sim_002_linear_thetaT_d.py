@@ -637,8 +637,8 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/model_free_nn'
     prefix_info = prefix + ':'
     
-    epsilon = 0.70
-    epsilon_decay = 0.90
+    epsilon       = 0.05#0.70
+    epsilon_decay = 1.00#0.90
     
     # define policy network
     model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
@@ -703,7 +703,7 @@ class TCatapultLPLinearSim(object):
           
           # Add to test results
           entry = {
-            'approach': 'model-based, online, NN(dynamics), CMA-ES(action)',
+            'approach': 'model-free, online, NN(policy), policy(action)',
             'desired_loc_land': float(desired_loc_land),
             'loc_land': float(loc_land),
             'pos_target': float(pos_target_h),
@@ -712,7 +712,8 @@ class TCatapultLPLinearSim(object):
             'preopt_simulations': int(0),
             'simulations': int(0),
             'policy_nn_ave_stderr_y': float(ave_stderr_y),
-            'policy_nn_ave_stderr_err': float(ave_stderr_err)
+            'policy_nn_ave_stderr_err': float(ave_stderr_err),
+            'epsilon': epsilon
           }
           test_results.append(entry)
           logger.log('{} test result added to temperary result dataset >>> '.format(prefix_info))
@@ -722,7 +723,11 @@ class TCatapultLPLinearSim(object):
         
         except:
           has_finished_this_round = False
-
+    
+    # Estimate final model quality
+    ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model_policy, x_train, y_train, x_valid, y_valid, should_plot=False)
+    logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
+    
     # Estimate test results
     self._estimate_test_results(test_results, should_save=True)
   
