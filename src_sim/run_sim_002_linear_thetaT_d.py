@@ -502,6 +502,9 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/model_free'
     prefix_info = prefix + ':'
     
+    logger.log('{} ALERT: Discarded version of model-free approach.'.format(prefix_info))
+    assert(False)
+    
     # query operation
     logger.log('{} model-free operations:'.format(prefix_info))
     logger.log('  - (1) launch policy parameters optimization with CMA-ES in complete sample space')
