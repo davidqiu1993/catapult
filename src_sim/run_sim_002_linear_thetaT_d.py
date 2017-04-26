@@ -630,7 +630,7 @@ class TCatapultLPLinearSim(object):
     # Estimate test results
     self._estimate_test_results(test_results)
   
-  def _run_model_free_nn(self):
+  def _run_model_free_nn_online(self):
     """
     model-free:
       - online
@@ -1406,10 +1406,10 @@ class TCatapultLPLinearSim(object):
     operation_dict = {
       'mb_offline': self._run_model_based_offline,
       'mb_online': self._run_model_based_online,
-      'mf': self._run_model_free,
-      'mf_nn': self._run_model_free_nn,
+      'mf': self._run_model_free, # discarded
+      'mf_nn_online': self._run_model_free_nn_online,
       'mf_nn_offline': self._run_model_free_nn_offline,
-      'hybrid': self._run_hybrid,
+      'hybrid': self._run_hybrid, # discarded
       'hybrid_nn2_offline': self._run_hybrid_nn2_offline,
       'hybrid_nn2_online': self._run_hybrid_nn2_online
     }
