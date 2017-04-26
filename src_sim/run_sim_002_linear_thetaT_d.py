@@ -231,7 +231,7 @@ class TCatapultLPLinearSim(object):
     
     plt.show()
 
-  def _run_model_based(self):
+  def _run_model_based_offline(self):
     """
     model-based:
       - offline
@@ -1401,7 +1401,7 @@ class TCatapultLPLinearSim(object):
   
   def getOperations(self):
     operation_dict = {
-      'mb': self._run_model_based,
+      'mb_offline': self._run_model_based_offline,
       'mb_online': self._run_model_based_online,
       'mf': self._run_model_free,
       'mf_nn': self._run_model_free_nn,
