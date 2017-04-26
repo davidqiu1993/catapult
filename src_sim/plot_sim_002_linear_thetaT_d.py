@@ -19,6 +19,12 @@ import math
 
 import pdb
 
+try:
+  input = raw_input
+except NameError:
+  pass
+
+
 
 def _estimate_test_results(test_results, dataset):
   prefix = 'estimate_test_results'
@@ -65,15 +71,82 @@ def _estimate_test_results(test_results, dataset):
   plt.show()
 
 
-if __name__ == '__main__':
-  assert(len(sys.argv) == 3)
+
+def _estimate_online_learning(test_results, dataset):
+  pass
+
+
+
+def _getOperations():
+  operations_list = [
+    {
+      'code': '1',
+      'desc': 'general test result estimation',
+      'func': _estimate_test_results
+    },
+    {
+      'code': '2',
+      'desc': 'online learning test result estimation',
+      'func': _estimate_online_learning
+    }
+  ]
   
+  return operations_list
+
+
+
+if __name__ == '__main__':
+  if len(sys.argv) != 3:
+    print('usage: ./plot_sim_002_linear_thetaT_d.py <test_results_yaml> <dataset_dir>')
+    quit()
+  
+  # Load test results
+  with open(sys.argv[1], 'r') as yaml_file:
+    test_results = yaml.load(yaml_file)
+  assert(len(test_results) > 0)
+  print('')
+  
+  # Load reference dataset
   loader_dataset = TCatapultDatasetSim(abs_dirpath=sys.argv[2], auto_init=False)
   loader_dataset.load_dataset()
   
-  with open(sys.argv[1], 'r') as yaml_file:
-    test_results = yaml.load(yaml_file)
+  # Print test result entry structure
+  print('test result entry structure:')
+  entry_items = []
+  max_entry_item_len = 0
+  for o in test_results[0]:
+    entry_items.append(o)
+    if len(o) > max_entry_item_len:
+      max_entry_item_len = len(o)
+  entry_items.sort()
+  print('  - approach: {}'.format(test_results[0]['approach']))
+  for i in range(len(entry_items)):
+    o = entry_items[i]
+    if o != 'approach':
+      print(('  - {0: <' + str(max_entry_item_len + 1) + '} {1}').format(o + ':', type(test_results[0][o])))
+  print('')
   
-  _estimate_test_results(test_results, loader_dataset)
+  # Get operations list
+  operations_list = _getOperations()
+  assert(len(operations_list) > 0)
+  
+  # Query operation
+  print('operations:')
+  for i in range(len(operations_list)):
+    print('  - ({}) {}'.format(operations_list[i]['code'], operations_list[i]['desc']))
+  operation_code_input = input('select operation (1/..)> ').strip().lower()
+  operation_code = str(operation_code_input)
+  print('')
+  
+  # Select operation
+  operation_index = 0 # default operation index
+  for i in range(len(operations_list)):
+    if operation_code == operations_list[i]['code']:
+      operation_index = i
+  op_func = operations_list[operation_index]['func']
+  op_func(test_results, loader_dataset)
+  
+  # Quit
+  quit()
 
 
