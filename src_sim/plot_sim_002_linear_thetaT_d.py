@@ -75,7 +75,17 @@ def _estimate_test_results(test_results, dataset):
 def _estimate_online_learning(test_results, dataset):
   prefix = 'estimate_online_learning'
   prefix_info = prefix + ':'
-
+  
+  list_seqs = []
+  list_seqkeys = []
+  append_seqkey = None
+  while not append_seqkey == '':
+    append_seqkey_input = input('{} add key (empty to end): '.format(prefix_info)).strip().lower()
+    append_seqkey = str(append_seqkey_input)
+    if len(append_seqkey) > 0:
+      list_seqkeys.append(append_seqkey)
+      list_seqs.append([])
+  
   seq_episode = []
   seq_rewards = []
   for i in range(len(test_results)):
@@ -88,9 +98,14 @@ def _estimate_online_learning(test_results, dataset):
     # rewards sequence
     cur_rewards = float(- abs(entry['desired_loc_land'] - entry['loc_land']))
     seq_rewards.append(cur_rewards)
-
+    
+    # other sequences
+    for i_seq in range(len(list_seqkeys)):
+      cur_value = float(entry[list_seqkeys[i_seq]])
+      list_seqs[i_seq].append(cur_value)
+  
   # figure configuraiton
-  n_subplots = 1
+  n_subplots = 1 + len(list_seqkeys)
   plt.figure()
 
   # plot: episode - rewards
@@ -98,7 +113,14 @@ def _estimate_online_learning(test_results, dataset):
   plt.xlabel('episode')
   plt.ylabel('rewards')
   plt.plot(seq_episode, seq_rewards, 'b-')
-
+  
+  # plot: others
+  for i_seq in range(len(list_seqkeys)):
+    plt.subplot(n_subplots * 100 + 10 + i_seq + 2)
+    plt.xlabel('episode')
+    plt.ylabel(list_seqkeys[i_seq])
+    plt.plot(seq_episode, list_seqs[i_seq], 'b-')
+  
   # show plot
   plt.show()
 
