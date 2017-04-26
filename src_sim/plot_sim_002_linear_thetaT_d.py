@@ -73,6 +73,38 @@ def _estimate_test_results(test_results, dataset):
 
 
 def _estimate_online_learning(test_results, dataset):
+  prefix = 'estimate_online_learning'
+  prefix_info = prefix + ':'
+
+  seq_episode = []
+  seq_rewards = []
+  for i in range(len(test_results)):
+    entry = test_results[i]
+
+    # episode sequence
+    cur_episode = int(i)
+    seq_episode.append(cur_episode)
+
+    # rewards sequence
+    cur_rewards = float(- abs(entry['desired_loc_land'] - entry['loc_land']))
+    seq_rewards.append(cur_rewards)
+
+  # figure configuraiton
+  n_subplots = 1
+  plt.figure()
+
+  # plot: episode - rewards
+  plt.subplot(n_subplots * 100 + 10 + 1)
+  plt.xlabel('episode')
+  plt.ylabel('rewards')
+  plt.plot(seq_episode, seq_rewards, 'b-')
+
+  # show plot
+  plt.show()
+
+
+
+def _no_operation(test_results, dataset):
   pass
 
 
@@ -88,6 +120,11 @@ def _getOperations():
       'code': '2',
       'desc': 'online learning test result estimation',
       'func': _estimate_online_learning
+    },
+    {
+      'code': 'q',
+      'desc': 'quit',
+      'func': _no_operation
     }
   ]
   
@@ -110,6 +147,10 @@ if __name__ == '__main__':
   loader_dataset = TCatapultDatasetSim(abs_dirpath=sys.argv[2], auto_init=False)
   loader_dataset.load_dataset()
   
+  # Print test samples
+  print('test samples: {}'.format(len(test_results)))
+  print('')
+
   # Print test result entry structure
   print('test result entry structure:')
   entry_items = []
