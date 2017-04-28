@@ -640,8 +640,8 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/model_free_nn'
     prefix_info = prefix + ':'
     
-    epsilon       = 0.05#0.70
-    epsilon_decay = 1.00#0.90
+    epsilon       = 0.70
+    epsilon_decay = 0.90
     
     # define policy network
     model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
@@ -728,7 +728,7 @@ class TCatapultLPLinearSim(object):
           has_finished_this_round = False
     
     # Estimate final model quality
-    ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model_policy, x_train, y_train, x_valid, y_valid, should_plot=False)
+    ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model_policy, x_train, y_train, x_valid, y_valid, should_plot=True)
     logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
     
     # Estimate test results
