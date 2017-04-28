@@ -24,6 +24,7 @@ import yaml
 import sys
 import math
 import numpy as np
+import random
 import matplotlib.pyplot as plt
 
 import pdb
@@ -1511,12 +1512,13 @@ class TCatapultLPLinearSim(object):
     CONFIG_POS_TARGET_MIN = self.catapult.POS_MIN + 0.01 * math.pi
     CONFIG_POS_TARGET_MAX = self.catapult.POS_MAX
 
-    CONFIG_PREOPT_SAMPLES_N = 3 #DEBUG
+    CONFIG_PREOPT_SAMPLES_N = 5 #DEBUG
     CONFIG_POLICY_UPDATE_ROUND = 5
-    CONFIG_POLICY_UPDATE_SAMPLES_N = 10 #DEBUG
+    CONFIG_POLICY_UPDATE_SAMPLES_PAST_N = 12 #DEBUG
+    CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N = 4
     CONFIG_ACTION_REPLAN_ERR_THRESHOLD = 0.05 * (CONFIG_ESTIMATED_LOC_LAND_MAX - CONFIG_ESTIMATED_LOC_LAND_MIN)
 
-    CONFIG_TEST_SAMPLES_N = 6 #DEBUG
+    CONFIG_TEST_SAMPLES_N = 100 #DEBUG
 
     # Test result entry items
     test_result_approach = 'hybrid, online, NN(dynamics), NN(policy; deterministic, NN(dynamics), MB(state)), policy(init_action), CMA-ES(action; init_action, var~err), [model-based if err>threshold]'
@@ -1573,9 +1575,11 @@ class TCatapultLPLinearSim(object):
 
     # Test with test samples
     test_samples_desired_loc_land = [float(CONFIG_ESTIMATED_LOC_LAND_MIN + np.random.sample() * (CONFIG_ESTIMATED_LOC_LAND_MAX - CONFIG_ESTIMATED_LOC_LAND_MIN)) for i in range(CONFIG_TEST_SAMPLES_N)]
+    experience_desired_loc_land = []
     test_results = []
     for i_sample in range(len(test_samples_desired_loc_land)):
       desired_loc_land = test_samples_desired_loc_land[i_sample]
+      experience_desired_loc_land.append(desired_loc_land)
 
       test_result_desired_loc_land = desired_loc_land
       test_result_loc_land = 0
@@ -1587,7 +1591,9 @@ class TCatapultLPLinearSim(object):
 
       # Update policy network with latest dynamics model
       if i_sample % CONFIG_POLICY_UPDATE_ROUND == 0:
-        logger.log('{} update policy network with latest dynamics model. (samples: {})'.format(prefix_info, CONFIG_POLICY_UPDATE_SAMPLES_N))
+        policy_update_samples_past_n = min(len(experience_desired_loc_land), CONFIG_POLICY_UPDATE_SAMPLES_PAST_N)
+        policy_update_samples_random_n = CONFIG_POLICY_UPDATE_SAMPLES_PAST_N + CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N - policy_update_samples_past_n
+        logger.log('{} update policy network with latest dynamics model. (experience_samples: {}, random_samples: {})'.format(prefix_info, policy_update_samples_past_n, policy_update_samples_random_n))
 
         # Cache previous policy network
         prev_model_policy = model_policy
@@ -1596,7 +1602,13 @@ class TCatapultLPLinearSim(object):
         model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
 
         # Generate training samples from dynamics model in state space
-        policy_update_samples_desired_loc_land = [float(CONFIG_ESTIMATED_LOC_LAND_MIN + np.random.sample() * (CONFIG_ESTIMATED_LOC_LAND_MAX - CONFIG_ESTIMATED_LOC_LAND_MIN)) for i in range(CONFIG_POLICY_UPDATE_SAMPLES_N)]
+        policy_update_samples_desired_loc_land = []
+        policy_update_samples_past = random.sample(experience_desired_loc_land, policy_update_samples_past_n)
+        for i in range(policy_update_samples_past_n):
+          policy_update_samples_desired_loc_land.append(policy_update_samples_past[i])
+        for i in range(policy_update_samples_random_n):
+          policy_update_sample = float(CONFIG_ESTIMATED_LOC_LAND_MIN + np.random.sample() * (CONFIG_ESTIMATED_LOC_LAND_MAX - CONFIG_ESTIMATED_LOC_LAND_MIN))
+          policy_update_samples_desired_loc_land.append(policy_update_sample)
 
         # Apply model-based method to find optimal actions for generated samples
         policy_update_samples_pos_target = []
@@ -1622,13 +1634,13 @@ class TCatapultLPLinearSim(object):
           logger.log('{} generate policy network update sample. (desired_loc_land: {}, pos_target: {}, n_iter: {}/{})'.format(prefix_info, policy_update_sample_desired_loc_land, optimal_pos_target, n_iter, test_result_preopt_simulations))
         
         # Train policy network
-        X = [[policy_update_samples_desired_loc_land[i]] for i in range(CONFIG_POLICY_UPDATE_SAMPLES_N)]
-        Y = [[policy_update_samples_pos_target[i]] for i in range(CONFIG_POLICY_UPDATE_SAMPLES_N)]
+        X = [[policy_update_samples_desired_loc_land[i]] for i in range(CONFIG_POLICY_UPDATE_SAMPLES_PAST_N + CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N)]
+        Y = [[policy_update_samples_pos_target[i]] for i in range(CONFIG_POLICY_UPDATE_SAMPLES_PAST_N + CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N)]
         X_train_policy = X
         Y_train_policy = Y
         self._train_model(model_policy, X, Y)
         
-        self._estimate_model_quality(model_policy, X_train_policy, Y_train_policy, X_valid_policy, Y_valid_policy, should_plot=True)
+        self._estimate_model_quality(model_policy, X_train_policy, Y_train_policy, X_valid_policy, Y_valid_policy, should_plot=False)
       
       # Predict initial guess by policy network
       prediction = model_policy.Predict([desired_loc_land], x_var=0.0**2, with_var=True, with_grad=True)
@@ -1655,7 +1667,7 @@ class TCatapultLPLinearSim(object):
 
       quality_err = abs(desired_loc_land - loc_land_h)
       should_replan = quality_err > CONFIG_ACTION_REPLAN_ERR_THRESHOLD
-      logger.log('{} estimate optimal action quality by dynamics model. (should_replan: {}, err: {})'.format(prefix_info, should_replan, quality_err))
+      logger.log('{} estimate optimal action quality by dynamics model. (should_replan: {}, err: {}/{})'.format(prefix_info, should_replan, quality_err, CONFIG_ACTION_REPLAN_ERR_THRESHOLD))
 
       # Replan
       if should_replan:
