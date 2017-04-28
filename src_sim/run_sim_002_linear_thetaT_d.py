@@ -1461,16 +1461,14 @@ class TCatapultLPLinearSim(object):
     return max(val_min, min(val, val_max))
 
   def _load_validation_datasets(self):
-    # Load dynamics model validation dataset
     X_valid_dynamics = []
     Y_valid_dynamics = []
     for i in range(len(self._dataset)):
       if i % 3 == 0:
         entry = self._dataset[i]
-        x_valid_dynamics.append([entry['action']['pos_target']])
-        y_valid_dynamics.append([entry['result']['loc_land']])
+        X_valid_dynamics.append([entry['action']['pos_target']])
+        Y_valid_dynamics.append([entry['result']['loc_land']])
 
-    # Load policy network validation dataset
     X_valid_policy = []
     Y_valid_policy = []
     for i in range(len(self._dataset)):
@@ -1479,7 +1477,6 @@ class TCatapultLPLinearSim(object):
         X_valid_policy.append([entry['result']['loc_land']])
         Y_valid_policy.append([entry['action']['pos_target']])
 
-    # Return result
     res = {
       'X_valid_dynamics': X_valid_dynamics,
       'Y_valid_dynamics': Y_valid_dynamics,
@@ -1507,12 +1504,12 @@ class TCatapultLPLinearSim(object):
     CONFIG_POS_TARGET_MIN = self.catapult.POS_MIN + 0.01 * math.pi
     CONFIG_POS_TARGET_MAX = self.catapult.POS_MAX
 
-    CONFIG_PREOPT_SAMPLES_N = 5
+    CONFIG_PREOPT_SAMPLES_N = 3 #DEBUG
     CONFIG_POLICY_UPDATE_ROUND = 5
-    CONFIG_POLICY_UPDATE_SAMPLES_N = 20
+    CONFIG_POLICY_UPDATE_SAMPLES_N = 10 #DEBUG
     CONFIG_ACTION_REPLAN_ERR_THRESHOLD = 0.05 * (CONFIG_ESTIMATED_LOC_LAND_MAX - CONFIG_ESTIMATED_LOC_LAND_MIN)
 
-    CONFIG_TEST_SAMPLES_N = 100
+    CONFIG_TEST_SAMPLES_N = 6 #DEBUG
 
     # Test result entry items
     test_result_approach = 'hybrid, online, NN(dynamics), NN(policy; deterministic, NN(dynamics), MB(state)), policy(init_action), CMA-ES(action; init_action, var~err), [model-based if err>threshold]'
@@ -1547,10 +1544,10 @@ class TCatapultLPLinearSim(object):
     preopt_samples_loc_land = []
     for i in range(preopt_samples_n):
       pos_target = float(CONFIG_POS_TARGET_MIN + np.random.sample() * (CONFIG_POS_TARGET_MAX - CONFIG_POS_TARGET_MIN))
-      loc_land = self.catapult.throw_linear(self._FIXED_POS_INIT, optimal_pos_target, self._FIXED_DURATION)
+      loc_land = self.catapult.throw_linear(self._FIXED_POS_INIT, pos_target, self._FIXED_DURATION)
       preopt_samples_pos_target.append(float(pos_target))
       preopt_samples_loc_land.append(float(loc_land))
-      logger.log('{} randomly samples from true dynamics. (pos_target: {}, loc_land: {})'.format(prefix_info, pos_target, loc_land))
+      logger.log('{} sample randomly from true dynamics. (pos_target: {}, loc_land: {})'.format(prefix_info, pos_target, loc_land))
 
     # Create dynamics model
     model_dynamics = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
@@ -1559,6 +1556,9 @@ class TCatapultLPLinearSim(object):
     logger.log('{} train dynamics model with random samples. (preopt_samples_n: {})'.format(prefix_info, preopt_samples_n))
     X = [[preopt_samples_pos_target[i]] for i in range(preopt_samples_n)]
     Y = [[preopt_samples_loc_land[i]] for i in range(preopt_samples_n)]
+    for i in range(preopt_samples_n):
+      X_train_dynamics.append(X[i])
+      Y_train_dynamics.append(Y[i])
     self._train_model(model_dynamics, X, Y)
 
     # Create initial policy network
@@ -1609,7 +1609,7 @@ class TCatapultLPLinearSim(object):
             'bounds': [[CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MIN], [CONFIG_POS_TARGET_MAX, CONFIG_POS_TARGET_MAX]],
             'verbose': False
           }
-          optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, policy_update_sample_desired_loc_land, options)
+          optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, policy_update_sample_desired_loc_land, 'cma', options)
           policy_update_samples_pos_target.append(optimal_pos_target)
           test_result_preopt_simulations += n_iter
           logger.log('{} generate policy network update sample. (desired_loc_land: {}, pos_target: {}, n_iter: {}/{})'.format(prefix_info, policy_update_sample_desired_loc_land, optimal_pos_target, n_iter, test_result_preopt_simulations))
@@ -1634,7 +1634,7 @@ class TCatapultLPLinearSim(object):
         'bounds': [[CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MIN], [CONFIG_POS_TARGET_MAX, CONFIG_POS_TARGET_MAX]],
         'verbose': False
       }
-      optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, options)
+      optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'cma', options)
       test_result_simulations += n_iter
       logger.log('{} optimize action by CMA-ES with dynamics model and initial guess. (desired_loc_land: {}, init_pos_target: {}, optimal_pos_target: {}, n_iter: {})'.format(
         prefix_info, desired_loc_land, options['init_pos_target'], optimal_pos_target, n_iter))
@@ -1646,7 +1646,7 @@ class TCatapultLPLinearSim(object):
 
       quality_err = abs(desired_loc_land - loc_land_h)
       should_replan = quality_err > CONFIG_ACTION_REPLAN_ERR_THRESHOLD
-      logger.log('{} estimate optimal action quality by dynamics model. (should_replan: {}, err: {})'.format(prefix_info, should_replan, err))
+      logger.log('{} estimate optimal action quality by dynamics model. (should_replan: {}, err: {})'.format(prefix_info, should_replan, quality_err))
 
       # Replan
       if should_replan:
@@ -1657,7 +1657,7 @@ class TCatapultLPLinearSim(object):
           'bounds': [[CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MIN], [CONFIG_POS_TARGET_MAX, CONFIG_POS_TARGET_MAX]],
           'verbose': False
         }
-        optimal_pos_target_replan, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, options)
+        optimal_pos_target_replan, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'cma', options)
         test_result_simulations += n_iter
 
         prediction = model_dynamics.Predict([optimal_pos_target_replan], x_var=0.0**2, with_var=True, with_grad=True)
@@ -1733,7 +1733,8 @@ class TCatapultLPLinearSim(object):
       'mf_nn_offline': self._run_model_free_nn_offline,
       'hybrid': self._run_hybrid, # discarded
       'hybrid_nn2_offline': self._run_hybrid_nn2_offline,
-      'hybrid_nn2_online': self._run_hybrid_nn2_online
+      'hybrid_nn2_online': self._run_hybrid_nn2_online,
+      'hybrid_nng': self._run_hybrid_nng
     }
     return operation_dict
   
