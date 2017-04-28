@@ -112,7 +112,7 @@ class TCatapultLPLinearSim(object):
     logger.log('{} load mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
     model.Load(LoadYAML(self._abs_dirpath_model + 'nn_model.yaml'), self._abs_dirpath_model)
   
-  def _estimate_model_quality(self, model, x_train, y_train, x_valid, y_valid, should_plot=True):
+  def _estimate_model_quality(self, model, x_train, y_train, x_valid, y_valid, should_plot=True, plot_density=100):
     assert(len(x_valid) > 0)
     assert(len(y_valid) > 0)
     assert(len(x_valid[0]) == 1)
@@ -161,22 +161,29 @@ class TCatapultLPLinearSim(object):
     if should_plot:
       plot_x_train  = [(x[0]) for x in x_train]
       plot_y_train  = [(y[0]) for y in y_train]
-      plot_x_valid  = [(x[0]) for x in x_valid]
-      plot_y_valid  = [(y[0]) for y in y_valid]
-      plot_y_hypo   = [(y[0]) for y in y_hypo]
-      plot_err_hypo = [(e[0]) for e in err_hypo]
-      plot_y_diff   = [(y[0]) for y in y_diff]
-      plot_y_stderr = [(e)    for e in y_stderr]
+      
+      x_min = x_valid[0][0]
+      x_max = x_valid[0][0]
+      for x in x_valid:
+        if x[0] < x_min: x_min = x[0]
+        if x[0] > x_max: x_max = x[0]
+      plot_x_model = [(x_min + i * (x_max - x_min) / plot_density) for i in range(plot_density + 1)]
+      
+      plot_y_model   = []
+      plot_err_model = []
+      for i in range(len(plot_x_model)):
+        prediction = model.Predict([plot_x_model[i]], x_var=0.0**2, with_var=True, with_grad=True)
+        h_i    = prediction.Y.ravel() # hypothesis
+        err_i  = np.sqrt(np.diag(prediction.Var))
+        grad_i = prediction.Grad.ravel()
+        plot_y_model.append(h_i[0])
+        plot_err_model.append(err_i[0])
       
       plt.figure(1)
       plt.clf()
       
       plt.plot(plot_x_train, plot_y_train, 'bx')
-      #plt.plot(plot_x_valid, plot_y_valid, 'b--')
-      #plt.plot(plot_x_valid, plot_y_hypo,  'r-')
-      plt.errorbar(plot_x_valid, plot_y_hypo, plot_err_hypo, color='r', linestyle='-')
-      plt.ylabel('x')
-      plt.ylabel('y')
+      plt.errorbar(plot_x_model, plot_y_model, plot_err_model, color='r', linestyle='-')
       plt.grid(True)
       
       plt.show()
@@ -1620,6 +1627,8 @@ class TCatapultLPLinearSim(object):
         X_train_policy = X
         Y_train_policy = Y
         self._train_model(model_policy, X, Y)
+        
+        self._estimate_model_quality(model_policy, X_train_policy, Y_train_policy, X_valid_policy, Y_valid_policy, should_plot=True)
       
       # Predict initial guess by policy network
       prediction = model_policy.Predict([desired_loc_land], x_var=0.0**2, with_var=True, with_grad=True)
@@ -1760,7 +1769,7 @@ if __name__ == '__main__':
   abs_dirpath_log = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/log_' + catapult_name))
   agent = TCatapultLPLinearSim(catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log)
   
-  operation = 'mb'
+  operation = 'mb_offline'
   if len(sys.argv) >= 2:
     if len(sys.argv) == 2 and (sys.argv[1] in agent.getOperations()):
       operation = sys.argv[1]
