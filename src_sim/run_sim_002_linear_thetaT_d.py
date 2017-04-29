@@ -58,6 +58,10 @@ class TCatapultLPLinearSim(object):
     
     self._FIXED_POS_INIT = self.catapult.POS_MIN
     self._FIXED_DURATION = self.catapult.DURATION_MIN
+    self._POS_TARGET_MIN = self.catapult.POS_MIN + 0.01 * math.pi
+    self._POS_TARGET_MAX = self.catapult.POS_MAX
+    self._ESTIMATED_LOC_LAND_MIN = -1.0
+    self._ESTIMATED_LOC_LAND_MAX = 98.0
     
     self._SHOULD_LOAD_MODEL = False
     self._SHOULD_SAVE_MODEL = False
@@ -355,6 +359,41 @@ class TCatapultLPLinearSim(object):
     """
     prefix = 'catapult_sim/model_based_online'
     prefix_info = prefix + ':'
+    
+    # Configurations
+    CONFIG_TEST_SAMPLES_N = 100
+    """
+    # Test result entry items
+    test_result_approach = 'hybrid, online, NN(dynamics), NN(policy; deterministic, NN(dynamics), MB(state)), policy(init_action), CMA-ES(action; init_action, var~err), [model-based if err>threshold]'
+    test_result_desired_loc_land = None
+    test_result_loc_land = None
+    test_result_pos_target = None
+    test_result_preopt_samples = CONFIG_PREOPT_SAMPLES_N
+    test_result_samples = None
+    test_result_preopt_simulations = 0
+    test_result_simulations = None
+    test_result_should_replan = None
+    test_result_has_replan_improved = None
+
+    # Load validation datasets
+    validation_datasets = self._load_validation_datasets()
+    X_valid_dynamics = validation_datasets['X_valid_dynamics']
+    Y_valid_dynamics = validation_datasets['Y_valid_dynamics']
+    X_valid_policy = validation_datasets['X_valid_policy']
+    Y_valid_policy = validation_datasets['Y_valid_policy']
+
+    # Define dynamics model online training dataset
+    X_train_dynamics = []
+    Y_train_dynamics = []
+
+    # Define policy model last training dataset
+    X_train_policy = []
+    Y_train_policy = []
+    
+    """
+    
+    #TODO
+    
     
     # Create model
     model = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
@@ -1507,18 +1546,18 @@ class TCatapultLPLinearSim(object):
     prefix_info = prefix + ':'
 
     # Configurations
-    CONFIG_ESTIMATED_LOC_LAND_MIN = -1.0
-    CONFIG_ESTIMATED_LOC_LAND_MAX = 105.0
-    CONFIG_POS_TARGET_MIN = self.catapult.POS_MIN + 0.01 * math.pi
-    CONFIG_POS_TARGET_MAX = self.catapult.POS_MAX
+    CONFIG_ESTIMATED_LOC_LAND_MIN = self._ESTIMATED_LOC_LAND_MIN
+    CONFIG_ESTIMATED_LOC_LAND_MAX = self._ESTIMATED_LOC_LAND_MAX
+    CONFIG_POS_TARGET_MIN = self._POS_TARGET_MIN
+    CONFIG_POS_TARGET_MAX = self._POS_TARGET_MAX
 
-    CONFIG_PREOPT_SAMPLES_N = 5 #DEBUG
+    CONFIG_PREOPT_SAMPLES_N = 5
     CONFIG_POLICY_UPDATE_ROUND = 5
-    CONFIG_POLICY_UPDATE_SAMPLES_PAST_N = 12 #DEBUG
+    CONFIG_POLICY_UPDATE_SAMPLES_PAST_N = 12
     CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N = 4
     CONFIG_ACTION_REPLAN_ERR_THRESHOLD = 0.05 * (CONFIG_ESTIMATED_LOC_LAND_MAX - CONFIG_ESTIMATED_LOC_LAND_MIN)
 
-    CONFIG_TEST_SAMPLES_N = 100 #DEBUG
+    CONFIG_TEST_SAMPLES_N = 100
 
     # Test result entry items
     test_result_approach = 'hybrid, online, NN(dynamics), NN(policy; deterministic, NN(dynamics), MB(state)), policy(init_action), CMA-ES(action; init_action, var~err), [model-based if err>threshold]'
@@ -1771,23 +1810,27 @@ class TCatapultLPLinearSim(object):
 
 
 if __name__ == '__main__':
-  dirpath_sim = '../../ode/simpleode/catapult'
-  catapult_name = 'sim_002_01'
-
+  operation = 'mb_offline'
+  catapult_instance = '01'
+  
+  argc = len(sys.argv)
+  if argc >= 2:
+    operation = sys.argv[1]
+  if argc >= 3:
+    catapult_instance = sys.argv[2]
+  if argc >= 4:
+    logger.log('usage: ./run_sim_002_linear_thetaT_d.py [<operation> <instance>]')
+    quit()
+  
+  dirpath_sim = '../../ode/simpleode/catapult_instance_' + catapult_instance
+  catapult_name = 'sim_002_02'
+  
   catapult = TCatapultSim(dirpath_sim)
   
   abs_dirpath_data = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/catapult_' + catapult_name))
   abs_dirpath_model = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/model_' + catapult_name))
   abs_dirpath_log = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/log_' + catapult_name))
   agent = TCatapultLPLinearSim(catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log)
-  
-  operation = 'mb_offline'
-  if len(sys.argv) >= 2:
-    if len(sys.argv) == 2 and (sys.argv[1] in agent.getOperations()):
-      operation = sys.argv[1]
-    else:
-      logger.log('usage: ./run_sim_002_linear_thetaT_d.py <operation>')
-      quit()
   
   agent.run(operation)
 
