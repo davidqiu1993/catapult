@@ -62,7 +62,7 @@ class TCatapultLPLinearSim(object):
     
     feature_dict = {
       'pos_init': [0.0],
-      'pos_target': np.array([(0.75 + i*0.0025) for i in range(int((0.95-0.75) / 0.0025) + 1)]) * math.pi,
+      'pos_target': np.array([(0.0 + i*0.005) for i in range(int((0.95-0.0) / 0.005) + 1)]) * math.pi,
       'duration': [0.50]
     }
     
