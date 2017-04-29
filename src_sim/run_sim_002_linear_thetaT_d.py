@@ -362,7 +362,7 @@ class TCatapultLPLinearSim(object):
     
     # Configurations
     CONFIG_PREOPT_SAMPLES_N = 5
-    CONFIG_TEST_SAMPLES_N = 100
+    CONFIG_TEST_SAMPLES_N = 40
     
     # Test result entry items
     test_result_approach = 'model-based, online, NN(dynamics), CMA-ES(action)'
@@ -670,99 +670,108 @@ class TCatapultLPLinearSim(object):
     prefix = 'catapult_sim/model_free_nn'
     prefix_info = prefix + ':'
     
-    epsilon       = 0.70
-    epsilon_decay = 0.90
+    # Configurations
+    CONFIG_PREOPT_SAMPLES_N = 5
+    CONFIG_TEST_SAMPLES_N = 40
     
-    # define policy network
+    # Test result entry items
+    test_result_approach = 'model-free, online, NN(policy; deterministic), policy(action)'
+    test_result_desired_loc_land = None
+    test_result_pos_target = None
+    test_result_loc_land = None
+    test_result_preopt_samples = CONFIG_PREOPT_SAMPLES_N
+    test_result_samples = None
+    test_result_preopt_simulations = 0
+    test_result_simulations = None
+    
+    # Load validation datasets
+    validation_datasets = self._load_validation_datasets()
+    X_valid_policy = validation_datasets['X_valid_policy']
+    Y_valid_policy = validation_datasets['Y_valid_policy']
+
+    # Define policy network online training dataset
+    X_train_policy = []
+    Y_train_policy = []
+    
+    # Collect random samples from true dynamics
+    preopt_samples_n = CONFIG_PREOPT_SAMPLES_N
+    preopt_samples_pos_target = []
+    preopt_samples_loc_land = []
+    for i in range(preopt_samples_n):
+      pos_target = float(self._POS_TARGET_MIN + np.random.sample() * (self._POS_TARGET_MAX - self._POS_TARGET_MIN))
+      loc_land = self.catapult.throw_linear(self._FIXED_POS_INIT, pos_target, self._FIXED_DURATION)
+      preopt_samples_pos_target.append(float(pos_target))
+      preopt_samples_loc_land.append(float(loc_land))
+      logger.log('{} sample randomly from true dynamics. (pos_target: {}, loc_land: {})'.format(prefix_info, pos_target, loc_land))
+
+    # Create policy network
     model_policy = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
-    
-    # Load validation dataset
-    x_valid = []
-    y_valid = []
-    for i in range(len(self._dataset)):
-      if i % 3 == 0:
-        entry = self._dataset[i]
-        x_valid.append([entry['result']['loc_land']])
-        y_valid.append([entry['action']['pos_target']])
-    
-    # Online dataset
-    x_train = []
-    y_train = []
+
+    # Train policy network with random samples
+    logger.log('{} train policy network with random samples. (preopt_samples_n: {})'.format(prefix_info, preopt_samples_n))
+    X = [[preopt_samples_loc_land[i]] for i in range(preopt_samples_n)]
+    Y = [[preopt_samples_pos_target[i]] for i in range(preopt_samples_n)]
+    for i in range(preopt_samples_n):
+      X_train_policy.append(X[i])
+      Y_train_policy.append(Y[i])
+    self._train_model(model_policy, X, Y)
     
     # Test desired landing locations
-    test_sample_desired_loc_land = [float(0.0 + np.random.sample() * 100.0) for i in range(100)]
+    test_samples_desired_loc_land = [float(0.0 + np.random.sample() * 100.0) for i in range(CONFIG_TEST_SAMPLES_N)]
     test_results = []
-    for i in range(len(test_sample_desired_loc_land)):
-      epsilon = epsilon * epsilon_decay
-      has_finished_this_round = False
-      while not has_finished_this_round:
-        try:
-          # Query desired landing location
-          desired_loc_land = test_sample_desired_loc_land[i]
-          
-          # Predict from policy network
-          prediction = model_policy.Predict([desired_loc_land], x_var=0.0**2, with_var=True, with_grad=True)
-          pos_target_h    = (prediction.Y.ravel())[0]
-          pos_target_err  = (np.sqrt(np.diag(prediction.Var)))[0]
-          pos_target_grad = (prediction.Grad.ravel())[0]
-          logger.log('{} Predict from policy network. (desired_loc_land = {}, pos_target_h = {}, pos_target_err = {})'.format(prefix_info, desired_loc_land, pos_target_h, pos_target_err))
-          
-          # Fix action
-          if pos_target_h < self.catapult.POS_MIN: pos_target_h = self.catapult.POS_MIN
-          if pos_target_h > self.catapult.POS_MAX: pos_target_h = self.catapult.POS_MAX
-          logger.log('{} Fix action. (pos_target_h = {})'.format(prefix_info, pos_target_h))
-          
-          # Add randomness to action
-          pos_target_h = pos_target_h + float((self.catapult.POS_MAX - self.catapult.POS_MIN) * (np.random.sample() - 0.5) * 2.0 * epsilon)
-          if pos_target_h < self.catapult.POS_MIN: pos_target_h = self.catapult.POS_MIN
-          if pos_target_h > self.catapult.POS_MAX: pos_target_h = self.catapult.POS_MAX
-          logger.log('{} Randomize action. (pos_target_h = {})'.format(prefix_info, pos_target_h))
-          
-          # Test in true dynamics
-          logger.log('{} test in true dynamics. (pos_init = {}, pos_target = {}, duration = {})'.format(prefix_info, self._FIXED_POS_INIT, pos_target_h, self._FIXED_DURATION))
-          loc_land = catapult.throw_linear(self._FIXED_POS_INIT, pos_target_h, self._FIXED_DURATION)
-          logger.log('{} loc_land = {}, desired_loc_land = {}'.format(prefix_info, loc_land, desired_loc_land))
-          
-          # Update model samples
-          logger.log('{} train policy network samples. (loc_land = {}, pos_target = {})'.format(prefix_info, loc_land, pos_target_h))
-          x_train.append([loc_land])
-          y_train.append([pos_target_h])
-          model_policy.Update([loc_land], [pos_target_h], not_learn=False)
-          
-          # Estimate model quality
-          ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model_policy, x_train, y_train, x_valid, y_valid, should_plot=False)
-          logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
-          time.sleep(2.0)
-          
-          # Add to test results
-          entry = {
-            'approach': 'model-free, online, NN(policy), policy(action)',
-            'desired_loc_land': float(desired_loc_land),
-            'loc_land': float(loc_land),
-            'pos_target': float(pos_target_h),
-            'preopt_samples': int(0),
-            'samples': int(i),
-            'preopt_simulations': int(0),
-            'simulations': int(0),
-            'policy_nn_ave_stderr_y': float(ave_stderr_y),
-            'policy_nn_ave_stderr_err': float(ave_stderr_err),
-            'epsilon': epsilon
-          }
-          test_results.append(entry)
-          logger.log('{} test result added to temperary result dataset >>> '.format(prefix_info))
-          logger.log(entry)
-          
-          has_finished_this_round = True
-        
-        except:
-          has_finished_this_round = False
-    
-    # Estimate final model quality
-    ave_stderr_y, ave_stderr_err = self._estimate_model_quality(model_policy, x_train, y_train, x_valid, y_valid, should_plot=True)
-    logger.log('{} ave_stderr_y = {}, ave_stderr_err = {}'.format(prefix_info, ave_stderr_y, ave_stderr_err))
+    for i_sample in range(len(test_samples_desired_loc_land)):
+      desired_loc_land = test_samples_desired_loc_land[i_sample]
+      test_result_desired_loc_land = desired_loc_land
+      test_result_pos_target = 0
+      test_result_loc_land = 0
+      test_result_samples = 0
+      test_result_simulations = 0
+      
+      # Predict action by policy network
+      prediction = model_policy.Predict([desired_loc_land], x_var=0.0**2, with_var=True, with_grad=True)
+      pos_target_h   = (prediction.Y.ravel())[0]
+      pos_target_err = (np.sqrt(np.diag(prediction.Var)))[0]
+      logger.log('{} predict action by policy network. (desired_loc_land: {}, pos_target_h: {}, pos_target_err: {})'.format(prefix_info, desired_loc_land, pos_target_h, pos_target_err))
+      
+      # Test in true dynamics
+      pos_target = float(self._fix_range(pos_target_h, self._POS_TARGET_MIN, self._POS_TARGET_MAX))
+      loc_land = self.catapult.throw_linear(self._FIXED_POS_INIT, pos_target, self._FIXED_DURATION)
+      logger.log('{} test in true dynamics. (desired_loc_land: {}, loc_land: {}, pos_target: {}'.format(prefix_info, desired_loc_land, loc_land, pos_target))
+      test_result_samples = i_sample
+      test_result_pos_target = pos_target
+      test_result_loc_land = loc_land
+
+      # Add to test results
+      entry = {
+        'approach': str(test_result_approach),
+        'desired_loc_land': float(test_result_desired_loc_land),
+        'loc_land': float(test_result_loc_land),
+        'pos_target': float(test_result_pos_target),
+        'preopt_samples': int(test_result_preopt_samples),
+        'samples': int(test_result_samples),
+        'preopt_simulations': int(test_result_preopt_simulations),
+        'simulations': int(test_result_simulations)
+      }
+      test_results.append(entry)
+      logger.log('{} test result added to temperary result dataset >>> '.format(prefix_info))
+      logger.log(entry)
+      
+      # Update policy network
+      logger.log('{} update policy network. (pos_target: {}, loc_land: {})'.format(prefix_info, pos_target, loc_land))
+      X_train_policy.append([loc_land])
+      Y_train_policy.append([pos_target])
+      model_policy.Update([loc_land], [pos_target], not_learn=False)
     
     # Estimate test results
-    self._estimate_test_results(test_results, should_save=True)
+    self._estimate_test_results(test_results)
+
+    # Estimate policy network
+    self._estimate_model_quality(
+      model_policy, 
+      X_train_policy, Y_train_policy, 
+      X_valid_policy, Y_valid_policy, 
+      should_plot=True
+    )
   
   def _run_model_free_nn_offline(self):
     """
@@ -1541,7 +1550,7 @@ class TCatapultLPLinearSim(object):
     CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N = 4
     CONFIG_ACTION_REPLAN_ERR_THRESHOLD = 0.05 * (CONFIG_ESTIMATED_LOC_LAND_MAX - CONFIG_ESTIMATED_LOC_LAND_MIN)
 
-    CONFIG_TEST_SAMPLES_N = 100
+    CONFIG_TEST_SAMPLES_N = 40
 
     # Test result entry items
     test_result_approach = 'hybrid, online, NN(dynamics), NN(policy; deterministic, NN(dynamics), MB(state)), policy(init_action), CMA-ES(action; init_action, var~err), [model-based if err>threshold]'
