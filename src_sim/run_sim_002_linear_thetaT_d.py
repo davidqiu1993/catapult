@@ -1776,7 +1776,15 @@ class TCatapultLPLinearSim(object):
       X_valid_policy, Y_valid_policy, 
       should_plot=True
     )
-
+  
+  def _run_hybrid_multilinear(self):
+    #TODO: hybrid model-based and model-free; multilinear policy as model-free component
+    assert(False)
+  
+  def _run_hybrid_hybrid(self):
+    #TODO: hybrid model-based and model-free; hybrid NNG and multilinear as model-free component
+    assert(False)
+  
   def getOperations(self):
     operation_dict = {
       'mb_offline': self._run_model_based_offline,
