@@ -103,8 +103,8 @@ def _load_for_analysis(test_results_dir, dataset_dir, multiple_test_results=Fals
     return test_results_list[0], dataset
 
 
-def _estimate_test_results(test_results_dir, dataset_dir):
-  prefix = 'estimate_test_results'
+def _evaluate_test_results(test_results_dir, dataset_dir):
+  prefix = 'evaluate_test_results'
   prefix_info = prefix + ':'
   
   test_results, dataset = _load_for_analysis(test_results_dir, dataset_dir)
@@ -150,8 +150,8 @@ def _estimate_test_results(test_results_dir, dataset_dir):
   plt.show()
 
 
-def _estimate_online_learning(test_results_dir, dataset_dir):
-  prefix = 'estimate_online_learning'
+def _evaluate_online_learning(test_results_dir, dataset_dir):
+  prefix = 'evaluate_online_learning'
   prefix_info = prefix + ':'
   
   test_results, dataset = _load_for_analysis(test_results_dir, dataset_dir)
@@ -241,12 +241,12 @@ def _getOperations():
     {
       'code': '1',
       'desc': 'general test result estimation',
-      'func': _estimate_test_results
+      'func': _evaluate_test_results
     },
     {
       'code': '2',
       'desc': 'online learning test result estimation',
-      'func': _estimate_online_learning
+      'func': _evaluate_online_learning
     }
   ]
   
