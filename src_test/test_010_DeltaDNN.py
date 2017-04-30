@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 import pdb
 
-sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/DeltaDNN'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/base'))
 from base_ml_dnn import TNNRegression
 from base_util import LoadYAML, SaveYAML, Rand, FRange1
 
