@@ -1979,7 +1979,7 @@ if __name__ == '__main__':
   dirpath_sim = '../../ode/simpleode/catapult_instance' + '_' + catapult_model + '_' + catapult_instance
   catapult_name = 'sim_' + catapult_model
   
-  catapult = TCatapultSim(dirpath_sim)
+  catapult = TCatapultSim(dirpath_sim, catapult_model=catapult_model)
   
   abs_dirpath_data = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/catapult_' + catapult_name))
   abs_dirpath_model = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/model_' + catapult_name))
