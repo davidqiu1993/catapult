@@ -26,59 +26,19 @@ except NameError:
   pass
 
 
-def _select_test_results_files(test_results_dir, max_select=None):
-  yaml_filenames = []
-  yaml_filenames_selected = []
-  
-  for dirname, dirnames, filenames in os.walk(test_results_dir):
-    for filename in filenames:
-      if '.yaml' in filename:
-        yaml_filenames.append(filename)
-  
-  should_end_select = False
-  while not should_end_select:
-    if len(yaml_filenames) <= 0:
-      break;
-    if max_select is not None and len(yaml_filenames_selected) >= max_select:
-      break;
-    
-    print('test results files available:')
-    for yaml_filename in yaml_filenames:
-      print ('  - {}'.format(yaml_filename))
-    
-    should_reselect = True
-    while should_reselect:
-      file_selected_input = input('select test results file (empty to end): ').strip()
-      file_selected = str(file_selected_input)
-      
-      if file_selected == '':
-        should_end_select = True
-        should_reselect = False
-      elif file_selected not in yaml_filenames:
-        print('file not found in available list')
-        should_reselect = True
-      else:
-        yaml_filenames.remove(file_selected)
-        yaml_filenames_selected.append(file_selected)
-        should_reselect = False
-    
-    if max_select is None:
-      print('test results files selected ({}):'.format(len(yaml_filenames_selected)))
-    else:
-      print('test results files selected ({}/{}):'.format(len(yaml_filenames_selected), max_select))
-    for yaml_filename in yaml_filenames_selected:
-      print ('  - {}'.format(yaml_filename))
-  
-  return yaml_filenames_selected
-
-
-def _load_test_results_files(test_results_dir, filenames):
+def _load_test_results_files(test_results_dir, filenames, as_dict=False):
   test_results_list = []
+  test_results_dict = {}
   for filename in filenames:
     with open(os.path.join(test_results_dir, filename), 'r') as yaml_file:
       test_results = yaml.load(yaml_file)
       test_results_list.append(test_results)
-  return test_results_list
+      test_results_dict[filename] = test_results
+  
+  if as_dict:
+    return test_results_dict
+  else:
+    return test_results_list
 
 
 def _load_reference_dataset(dataset_dir):
@@ -87,14 +47,85 @@ def _load_reference_dataset(dataset_dir):
   return loader_dataset
 
 
+def _select_test_results_files(test_results_dir, multiple_test_results=False):
+  yaml_filenames = []
+  yaml_filenames_selected = []
+  
+  for dirname, dirnames, filenames in os.walk(test_results_dir):
+    for filename in filenames:
+      if '.yaml' in filename:
+        yaml_filenames.append(filename)
+  
+  # single test results file
+  if not multiple_test_results:
+    print('test results files available:')
+    for yaml_filename in yaml_filenames:
+      print ('  - {}'.format(yaml_filename))
+    
+    should_reselect = True
+    while should_reselect:
+      file_selected_input = input('select test results file: ').strip()
+      file_selected = str(file_selected_input)
+      
+      if file_selected not in yaml_filenames:
+        print('file not found in available list.')
+        should_reselect = True
+      else:
+        yaml_filenames.remove(file_selected)
+        yaml_filenames_selected.append(file_selected)
+        should_reselect = False
+    
+    print('test results file selected: {}'.format(yaml_filenames_selected[0]))
+  
+  # multiple test results files
+  else:
+    test_results_dict = _load_test_results_files(test_results_dir, yaml_filenames, as_dict=True)
+    
+    test_results_catagories = {}
+    for filename in test_results_dict:
+      test_results = test_results_dict[filename]
+      if len(test_results) > 0:
+        if test_results[0]['approach'] not in test_results_catagories:
+          test_results_catagories[test_results[0]['approach']] = {}
+        if len(test_results) not in test_results_catagories[test_results[0]['approach']]:
+          test_results_catagories[test_results[0]['approach']][len(test_results)] = []
+        (test_results_catagories[test_results[0]['approach']][len(test_results)]).append(filename)
+    
+    test_results_catagories_list = []
+    for approach in test_results_catagories:
+      for n_samples in test_results_catagories[approach]:
+        test_results_catagories_list.append((approach, n_samples, test_results_catagories[approach][n_samples]))
+    
+    test_results_catagories_list.sort()
+    
+    print('test results collections available:')
+    for i in range(len(test_results_catagories_list)):
+      approach, n_samples, test_results_collection = test_results_catagories_list[i]
+      print('  ({}) approach: {}, samples: {}, files: {}'.format(i+1, approach, n_samples, len(test_results_collection)))
+    
+    should_reselect = True
+    while should_reselect:
+      collection_index_input = input('select test results collection index: ').strip()
+      collection_index = int(collection_index_input)
+      if 1 <= collection_index and collection_index <= len(test_results_catagories_list):
+        approach, n_samples, test_results_collection = test_results_catagories_list[collection_index-1]
+        yaml_filenames_selected = test_results_collection
+        print('test results collection selected:')
+        print('  - approach: {}'.format(approach))
+        print('  - samples:  {}'.format(n_samples))
+        print('  - files:    {}'.format(len(test_results_collection)))
+        should_reselect = False
+      else:
+        print('test results collection index is invalid.')
+        should_reselect = True
+  
+  return yaml_filenames_selected
+
+
 def _load_for_analysis(test_results_dir, dataset_dir, multiple_test_results=False):
   dataset = _load_reference_dataset(dataset_dir)
   
-  test_results_filenames = []
-  if multiple_test_results:
-    test_results_filenames = _select_test_results_files(test_results_dir, max_select=None)
-  else:
-    test_results_filenames = _select_test_results_files(test_results_dir, max_select=1)
+  test_results_filenames = _select_test_results_files(test_results_dir, multiple_test_results=multiple_test_results)
   test_results_list = _load_test_results_files(test_results_dir, test_results_filenames)
   
   if multiple_test_results:
