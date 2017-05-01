@@ -26,6 +26,7 @@ import math
 import numpy as np
 import random
 import matplotlib.pyplot as plt
+from scipy import optimize as sp_optimize
 
 import pdb
 
@@ -350,14 +351,16 @@ class TCatapultLPLinearSim(object):
     # Estimate test results
     self._estimate_test_results(test_results)
   
-  def _run_model_based_online(self):
+  def _run_model_based_online(self, optimizer='cma'):
     """
     Model-based:
       - online
       - NN(dynamics)
-      - CMA-ES(action)
+      - CMA-ES(action) / GD(action)
     """
-    prefix = 'catapult_sim/model_based_online'
+    assert(optimizer in ['cma', 'gd'])
+    
+    prefix = 'catapult_sim/model_based_online' + '_' + optimizer
     prefix_info = prefix + ':'
     
     # Configurations
@@ -365,7 +368,12 @@ class TCatapultLPLinearSim(object):
     CONFIG_TEST_SAMPLES_N = 40
     
     # Test result entry items
-    test_result_approach = 'model-based, online, NN(dynamics), CMA-ES(action)'
+    if optimizer == 'cma':
+      test_result_approach = 'model-based, online, NN(dynamics), CMA-ES(action)'
+    elif optimizer == 'gd':
+      test_result_approach = 'model-based, online, NN(dynamics), GD(action)'
+    else:
+      assert(False)
     test_result_desired_loc_land = None
     test_result_pos_target = None
     test_result_loc_land = None
@@ -417,16 +425,29 @@ class TCatapultLPLinearSim(object):
       test_result_samples = 0
       test_result_simulations = 0
       
-      # Optimize action by CMA-ES over dynamics model
-      options = {
-        'init_pos_target': (self._POS_TARGET_MAX + self._POS_TARGET_MIN) / 2.0,
-        'init_var': (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * 1.0,
-        'bounds': [[self._POS_TARGET_MIN, self._POS_TARGET_MIN], [self._POS_TARGET_MAX, self._POS_TARGET_MAX]],
-        'verbose': False
-      }
-      optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'cma', options)
-      test_result_simulations += n_iter
-      logger.log('{} optimize action by CMA-ES over dynamics model. (desired_loc_land: {}, pos_target: {}, n_iter: {})'.format(prefix_info, desired_loc_land, optimal_pos_target, n_iter))
+      if optimizer == 'cma':
+        # Optimize action by CMA-ES over dynamics model
+        options = {
+          'init_pos_target': (self._POS_TARGET_MAX + self._POS_TARGET_MIN) / 2.0,
+          'init_var': (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * 1.0,
+          'bounds': [[self._POS_TARGET_MIN, self._POS_TARGET_MIN], [self._POS_TARGET_MAX, self._POS_TARGET_MAX]],
+          'verbose': False
+        }
+        optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'cma', options)
+        test_result_simulations += n_iter
+        logger.log('{} optimize action by CMA-ES over dynamics model. (desired_loc_land: {}, pos_target: {}, n_iter: {})'.format(prefix_info, desired_loc_land, optimal_pos_target, n_iter))
+      elif optimizer == 'gd':
+        # Optimize action by gradient descent over dynamics model
+        options = {
+          'init_pos_target': (self._POS_TARGET_MAX + self._POS_TARGET_MIN) / 2.0,
+          'bounds': [self._POS_TARGET_MIN, self._POS_TARGET_MAX],
+          'verbose': False
+        }
+        optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'gd', options)
+        test_result_simulations += n_iter
+        logger.log('{} optimize action by gradient descent over dynamics model. (desired_loc_land: {}, pos_target: {}, n_iter: {})'.format(prefix_info, desired_loc_land, optimal_pos_target, n_iter))
+      else:
+        assert(False)
       
       # Test in true dynamics
       pos_target = float(self._fix_range(optimal_pos_target, self._POS_TARGET_MIN, self._POS_TARGET_MAX))
@@ -467,6 +488,24 @@ class TCatapultLPLinearSim(object):
       X_valid_dynamics, Y_valid_dynamics, 
       should_plot=True
     )
+  
+  def _run_model_based_online_cma(self):
+    """
+    Model-based:
+      - online
+      - NN(dynamics)
+      - CMA-ES(action)
+    """
+    return self._run_model_based_online('cma')
+  
+  def _run_model_based_online_gd(self):
+    """
+    Model-based:
+      - online
+      - NN(dynamics)
+      - GD(action)
+    """
+    return self._run_model_based_online('gd')
   
   def _penalize_action(self, pos_init, pos_target, duration):
     prefix = 'catapult_sim/penalize_action'
@@ -1441,6 +1480,59 @@ class TCatapultLPLinearSim(object):
     # Estimate test results
     self._estimate_test_results(test_results)
   
+  def _solve_for_pos_target_mb_gd(self, model_dynamics, desired_loc_land, options):
+    prefix = 'catapult/solve_for_pos_target_mb_gd'
+    prefix_info = prefix + ':'
+
+    option_init_pos_target = options['init_pos_target']
+    option_bounds          = options['bounds']
+    option_verbose         = options['verbose']
+    
+    init_guess = np.array([option_init_pos_target])
+    tolx       = 0.0001
+    self._solve_for_pos_target_mb_gd_iteration = 0
+    
+    def f_loss(x):
+      pos_target = x[0]
+      self._solve_for_pos_target_mb_gd_iteration += 1
+      prediction = model_dynamics.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+      loc_land_h   = float((prediction.Y.ravel())[0])
+      loss = 0.5 * (desired_loc_land - loc_land_h)**2
+      return loss
+    
+    def f_loss_grad(x):
+      pos_target = x[0]
+      self._solve_for_pos_target_mb_gd_iteration += 1
+      prediction = model_dynamics.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+      loc_land_h    = float((prediction.Y.ravel())[0])
+      loc_land_grad = float(prediction.Grad.ravel()[0])
+      loss_grad = loc_land_grad * (loc_land_h - desired_loc_land)
+      return np.array([loss_grad])
+    
+    x = init_guess
+    x_prev = x + tolx + 1
+    
+    iteration = 0
+    has_diverge = False
+    while np.linalg.norm(x - x_prev) >= tolx and not diverge:
+      iteration += 1
+      direction = - f_loss_grad(x)
+      res = sp_optimize.line_search(f_loss, f_loss_grad, x, direction)
+      if res[0] is None:
+        has_diverge = True
+        alpha = 1.0
+      else:
+        has_diverge = False
+        alpha = res[0]
+      x_prev = x
+      x = x_prev + alpha * direction
+      if option_verbose:
+        logger.log('{} iter = {} ({}), alpha = {}, direction = {}, x_next = {}'.format(prefix_info, iteration, self._solve_for_pos_target_mb_gd_iteration, alpha, direction, x))
+    
+    optimal_pos_target = self._fix_range(x[0], option_bounds[0], option_bounds[1])
+    
+    return optimal_pos_target, self._solve_for_pos_target_mb_gd_iteration
+
   def _solve_for_pos_target_mb_gddp(self, model_dynamics, desired_loc_land, options):
     #TODO
     assert(False)
@@ -1488,9 +1580,11 @@ class TCatapultLPLinearSim(object):
     return optimal_pos_target, self._solve_for_pos_target_mb_cma_iteration
 
   def _solve_for_pos_target_mb(self, model_dynamics, desired_loc_land, method, options):
-    if method == 'cma':
+    if method == 'cma': # CMA-ES
       return self._solve_for_pos_target_mb_cma(model_dynamics, desired_loc_land, options)
-    elif method == 'gddp':
+    elif method == 'gd': # Gradient descent
+      return self._solve_for_pos_target_mb_gd(model_dynamics, desired_loc_land, options)
+    elif method == 'gddp': # Graph-DDP
       return self._solve_for_pos_target_mb_gddp(model_dynamics, desired_loc_land, options)
     else:
       assert(False)
@@ -1525,17 +1619,19 @@ class TCatapultLPLinearSim(object):
     }
     return res
 
-  def _run_hybrid_nng(self):
+  def _run_hybrid_nng(self, optimizer='cma'):
     """
     hybrid:
       - online
       - NN(dynamics)
       - NN(policy; deterministic, NN(dynamics), MB(state))
       - policy(init_action)
-      - CMA-ES(action; init_action, var~err)
+      - CMA-ES(action; init_action, var~err) / GD(action; init_action)
       - [model-based if err>threshold]
     """
-    prefix = 'catapult_sim/hybrid_nng'
+    assert(optimizer in ['cma', 'gd'])
+    
+    prefix = 'catapult_sim/hybrid_nng' + '_' + optimizer
     prefix_info = prefix + ':'
 
     # Configurations
@@ -1553,7 +1649,12 @@ class TCatapultLPLinearSim(object):
     CONFIG_TEST_SAMPLES_N = 40
 
     # Test result entry items
-    test_result_approach = 'hybrid, online, NN(dynamics), NN(policy; deterministic, NN(dynamics), MB(state)), policy(init_action), CMA-ES(action; init_action, var~err), [model-based if err>threshold]'
+    if optimizer == 'cma':
+      test_result_approach = 'hybrid, online, NN(dynamics), NN(policy; deterministic, NN(dynamics), MB(state)), policy(init_action), CMA-ES(action; init_action, var~err), [model-based if err>threshold]'
+    elif optimizer == 'gd':
+      test_result_approach = 'hybrid, online, NN(dynamics), NN(policy; deterministic, NN(dynamics), MB(state)), policy(init_action), GD(action; init_action), [model-based if err>threshold]'
+    else:
+      assert(False)
     test_result_desired_loc_land = None
     test_result_loc_land = None
     test_result_pos_target = None
@@ -1652,15 +1753,26 @@ class TCatapultLPLinearSim(object):
           prediction = prev_model_policy.Predict([policy_update_sample_desired_loc_land], x_var=0.0**2, with_var=True, with_grad=True)
           pos_target_h   = (prediction.Y.ravel())[0]
           pos_target_err = (np.sqrt(np.diag(prediction.Var)))[0]
-
-          # Optimize actions by CMA-ES with dynamics model
-          options = {
-            'init_pos_target': self._fix_range(pos_target_h, CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX),
-            'init_var': (CONFIG_POS_TARGET_MAX - CONFIG_POS_TARGET_MIN) * 0.2,
-            'bounds': [[CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MIN], [CONFIG_POS_TARGET_MAX, CONFIG_POS_TARGET_MAX]],
-            'verbose': False
-          }
-          optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, policy_update_sample_desired_loc_land, 'cma', options)
+          
+          if optimizer == 'cma':
+            # Optimize actions by CMA-ES with dynamics model
+            options = {
+              'init_pos_target': self._fix_range(pos_target_h, CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX),
+              'init_var': (CONFIG_POS_TARGET_MAX - CONFIG_POS_TARGET_MIN) * 0.2,
+              'bounds': [[CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MIN], [CONFIG_POS_TARGET_MAX, CONFIG_POS_TARGET_MAX]],
+              'verbose': False
+            }
+            optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, policy_update_sample_desired_loc_land, 'cma', options)
+          elif optimizer == 'gd':
+            # Optimize actions by gradient descent with dynamics model
+            options = {
+              'init_pos_target': self._fix_range(pos_target_h, CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX),
+              'bounds': [CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX],
+              'verbose': False
+            }
+            optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, policy_update_sample_desired_loc_land, 'gd', options)
+          else:
+            assert(False)
           policy_update_samples_pos_target.append(optimal_pos_target)
           test_result_preopt_simulations += n_iter
           logger.log('{} generate policy network update sample. (desired_loc_land: {}, pos_target: {}, n_iter: {}/{})'.format(prefix_info, policy_update_sample_desired_loc_land, optimal_pos_target, n_iter, test_result_preopt_simulations))
@@ -1679,18 +1791,32 @@ class TCatapultLPLinearSim(object):
       pos_target_h   = (prediction.Y.ravel())[0]
       pos_target_err = (np.sqrt(np.diag(prediction.Var)))[0]
       logger.log('{} predict initial guess by policy network. (desired_loc_land: {}, pos_target_h: {}, pos_target_err: {})'.format(prefix_info, desired_loc_land, pos_target_h, pos_target_err))
-
-      # Optimize action by CMA-ES with dynamics model and initial guess
-      options = {
-        'init_pos_target': self._fix_range(pos_target_h, CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX),
-        'init_var': (CONFIG_POS_TARGET_MAX - CONFIG_POS_TARGET_MIN) * 0.05,
-        'bounds': [[CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MIN], [CONFIG_POS_TARGET_MAX, CONFIG_POS_TARGET_MAX]],
-        'verbose': False
-      }
-      optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'cma', options)
-      test_result_simulations += n_iter
-      logger.log('{} optimize action by CMA-ES with dynamics model and initial guess. (desired_loc_land: {}, init_pos_target: {}, optimal_pos_target: {}, n_iter: {})'.format(
-        prefix_info, desired_loc_land, options['init_pos_target'], optimal_pos_target, n_iter))
+      
+      if optimizer == 'cma':
+        # Optimize action by CMA-ES with dynamics model and initial guess
+        options = {
+          'init_pos_target': self._fix_range(pos_target_h, CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX),
+          'init_var': (CONFIG_POS_TARGET_MAX - CONFIG_POS_TARGET_MIN) * 0.05,
+          'bounds': [[CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MIN], [CONFIG_POS_TARGET_MAX, CONFIG_POS_TARGET_MAX]],
+          'verbose': False
+        }
+        optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'cma', options)
+        test_result_simulations += n_iter
+        logger.log('{} optimize action by CMA-ES with dynamics model and initial guess. (desired_loc_land: {}, init_pos_target: {}, optimal_pos_target: {}, n_iter: {})'.format(
+          prefix_info, desired_loc_land, options['init_pos_target'], optimal_pos_target, n_iter))
+      elif optimizer == 'gd':
+        # Optimize action by gradient descent with dynamics model and initial guess
+        options = {
+          'init_pos_target': self._fix_range(pos_target_h, CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX),
+          'bounds': [CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX],
+          'verbose': False
+        }
+        optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'gd', options)
+        test_result_simulations += n_iter
+        logger.log('{} optimize action by gradient descent with dynamics model and initial guess. (desired_loc_land: {}, init_pos_target: {}, optimal_pos_target: {}, n_iter: {})'.format(
+          prefix_info, desired_loc_land, options['init_pos_target'], optimal_pos_target, n_iter))
+      else:
+        assert(False)
 
       # Estimate optimal action quality by dynamics model
       prediction = model_dynamics.Predict([optimal_pos_target], x_var=0.0**2, with_var=True, with_grad=True)
@@ -1701,7 +1827,7 @@ class TCatapultLPLinearSim(object):
       should_replan = quality_err > CONFIG_ACTION_REPLAN_ERR_THRESHOLD
       logger.log('{} estimate optimal action quality by dynamics model. (should_replan: {}, err: {}/{})'.format(prefix_info, should_replan, quality_err, CONFIG_ACTION_REPLAN_ERR_THRESHOLD))
 
-      # Replan
+      # Replan with CMA-ES as pure model-based approach backup
       if should_replan:
         test_result_should_replan = True
         options = {
@@ -1777,6 +1903,30 @@ class TCatapultLPLinearSim(object):
       should_plot=True
     )
   
+  def _run_hybrid_nng_cma(self):
+    """
+    hybrid:
+      - online
+      - NN(dynamics)
+      - NN(policy; deterministic, NN(dynamics), MB(state))
+      - policy(init_action)
+      - CMA-ES(action; init_action, var~err)
+      - [model-based if err>threshold]
+    """
+    return self._run_hybrid_nng(optimizer='cma')
+  
+  def _run_hybrid_nng_gd(self, optimizer='cma'):
+    """
+    hybrid:
+      - online
+      - NN(dynamics)
+      - NN(policy; deterministic, NN(dynamics), MB(state))
+      - policy(init_action)
+      - GD(action; init_action)
+      - [model-based if err>threshold]
+    """
+    return self._run_hybrid_nng(optimizer='gd')
+  
   def _run_hybrid_multilinear(self):
     #TODO: hybrid model-based and model-free; multilinear policy as model-free component
     assert(False)
@@ -1788,14 +1938,16 @@ class TCatapultLPLinearSim(object):
   def getOperations(self):
     operation_dict = {
       'mb_offline': self._run_model_based_offline,
-      'mb_online': self._run_model_based_online,
+      'mb_online_cma': self._run_model_based_online_cma,
+      'mb_online_gd': self._run_model_based_online_gd,
       'mf': self._run_model_free, # discarded
       'mf_nn_online': self._run_model_free_nn_online,
       'mf_nn_offline': self._run_model_free_nn_offline,
       'hybrid': self._run_hybrid, # discarded
       'hybrid_nn2_offline': self._run_hybrid_nn2_offline,
       'hybrid_nn2_online': self._run_hybrid_nn2_online,
-      'hybrid_nng': self._run_hybrid_nng
+      'hybrid_nng_cma': self._run_hybrid_nng_cma,
+      'hybrid_nng_gd': self._run_hybrid_nng_gd
     }
     return operation_dict
   
