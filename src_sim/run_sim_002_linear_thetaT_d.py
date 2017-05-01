@@ -1514,7 +1514,7 @@ class TCatapultLPLinearSim(object):
     
     iteration = 0
     has_diverge = False
-    while np.linalg.norm(x - x_prev) >= tolx and not diverge:
+    while np.linalg.norm(x - x_prev) >= tolx and not has_diverge:
       iteration += 1
       direction = - f_loss_grad(x)
       res = sp_optimize.line_search(f_loss, f_loss_grad, x, direction)
