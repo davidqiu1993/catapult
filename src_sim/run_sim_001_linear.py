@@ -458,21 +458,25 @@ class TCatapultLPLinearSim(object):
 
 
 if __name__ == '__main__':
-  dirpath_sim = '../../ode/simpleode/catapult'
-  catapult_name = 'catapult_sim_002'
+  operation = None
+  catapult_model = None
+  catapult_instance = None
+  
+  if len(sys.argv) == 4:
+    operation = sys.argv[1]
+    catapult_model = sys.argv[2]
+    catapult_instance = sys.argv[3]
+  else:
+    print('usage: ./run_001_linear.py <operation> <model> <instance>')
+    quit()
+  
+  dirpath_sim = '../../ode/simpleode/catapult_instance' + '_' + catapult_model + '_' + catapult_instance
+  catapult_name = 'sim_' + catapult_model
 
-  catapult = TCatapultSim(dirpath_sim)
+  catapult = TCatapultSim(dirpath_sim, catapult_model=catapult_model)
   
-  abs_dirpath_data = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/' + catapult_name))
+  abs_dirpath_data = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/catapult_' + catapult_name))
   agent = TCatapultLPLinearSim(catapult, abs_dirpath_data=abs_dirpath_data)
-  
-  operation = 'check_dataset'
-  if len(sys.argv) >= 2:
-    if len(sys.argv) == 2 and (sys.argv[1] in agent.getOperations()):
-      operation = sys.argv[1]
-    else:
-      print('usage: ./run_001_linear.py <operation>')
-      quit()
   
   agent.run(operation)
 
