@@ -32,25 +32,34 @@ class TCatapultSim(object):
   @constant MOTION_CUSTOM The customized motion control.
   """
   
-  def __init__(self, dirpath_sim):
+  def __init__(self, dirpath_sim, catapult_model):
     """
     Initialize a catapult controller.
     
     @param dirpath_sim The directory path of the simulator for data exchange.
+    @param catapult_model The model of the catapult.
     """
     super(TCatapultSim, self).__init__()
     
     self._dirpath_sim = os.path.abspath(dirpath_sim);
     self._filepath_msg_simulator = os.path.abspath(os.path.join(self._dirpath_sim, 'msg_simulator.msg'))
     self._filepath_msg_controller = os.path.abspath(os.path.join(self._dirpath_sim, 'msg_controller.msg'))
-
-    self.POS_MIN  = 0.00 * math.pi
-    self.POS_MAX  = 0.95 * math.pi
-    self.POS_MID  = 0.50 * math.pi
-    self.POS_INIT = 0.00 * math.pi
     
-    self.DURATION_MIN = 0.50
-
+    if catapult_model == '001_02':
+      self.POS_MIN  = 0.00 * math.pi
+      self.POS_MAX  = 0.80 * math.pi
+      self.POS_MID  = 0.50 * math.pi
+      self.POS_INIT = 0.00 * math.pi
+      self.DURATION_MIN = 0.10
+    elif catapult_model == '002_02':
+      self.POS_MIN  = 0.00 * math.pi
+      self.POS_MAX  = 0.95 * math.pi
+      self.POS_MID  = 0.50 * math.pi
+      self.POS_INIT = 0.00 * math.pi
+      self.DURATION_MIN = 0.50
+    else:
+      assert(False)
+    
     self.MOTION_LINEAR = 'linear'
     self.MOTION_CUSTOM = 'custom'
   
