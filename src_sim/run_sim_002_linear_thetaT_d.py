@@ -1963,19 +1963,21 @@ class TCatapultLPLinearSim(object):
 
 
 if __name__ == '__main__':
-  operation = 'mb_offline'
-  catapult_instance = '01'
+  operation = None
+  catapult_model = None
+  catapult_instance = None
   
   argc = len(sys.argv)
-  if argc == 3:
+  if argc == 4:
     operation = sys.argv[1]
-    catapult_instance = sys.argv[2]
+    catapult_model = sys.argv[2]
+    catapult_instance = sys.argv[3]
   else:
-    logger.log('usage: ./run_sim_002_linear_thetaT_d.py <operation> <instance>')
+    logger.log('usage: ./run_sim_002_linear_thetaT_d.py <operation> <model> <instance>')
     quit()
   
-  dirpath_sim = '../../ode/simpleode/catapult_instance_' + catapult_instance
-  catapult_name = 'sim_002_02'
+  dirpath_sim = '../../ode/simpleode/catapult_instance' + '_' + catapult_model + '_' + catapult_instance
+  catapult_name = 'sim_' + catapult_model
   
   catapult = TCatapultSim(dirpath_sim)
   
