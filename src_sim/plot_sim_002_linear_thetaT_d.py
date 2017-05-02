@@ -346,15 +346,15 @@ def _evaluate_online_learning_multitest(test_results_dir, dataset_dir):
   seq_rewards_err = []
   list_seqs_mean = [[] for j in range(len(list_seqs_mtlist[0]))]
   list_seqs_center = [[] for j in range(len(list_seqs_mtlist[0]))]
-  list_seqs_err = [[] for j in range(len(list_seqs_mtlist[0]))]  
+  list_seqs_err = [[] for j in range(len(list_seqs_mtlist[0]))]
   for i in range(len(seq_episode)):
     reward_acc = 0
-    reward_min = seq_rewards_mtlist[0][0]
-    reward_max = seq_rewards_mtlist[0][0]
+    reward_min = seq_rewards_mtlist[0][i]
+    reward_max = seq_rewards_mtlist[0][i]
     
     seqs_acc = [0                             for i_seq in range(len(list_seqs_mtlist[0]))]
-    seqs_min = [list_seqs_mtlist[0][i_seq][0] for i_seq in range(len(list_seqs_mtlist[0]))]
-    seqs_max = [list_seqs_mtlist[0][i_seq][0] for i_seq in range(len(list_seqs_mtlist[0]))]
+    seqs_min = [list_seqs_mtlist[0][i_seq][i] for i_seq in range(len(list_seqs_mtlist[0]))]
+    seqs_max = [list_seqs_mtlist[0][i_seq][i] for i_seq in range(len(list_seqs_mtlist[0]))]
     
     for i_mt in range(mt_count):
       reward_acc += seq_rewards_mtlist[i_mt][i]
