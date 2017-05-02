@@ -52,10 +52,12 @@ class TCatapultLPLinearSim(object):
   Simulation catapult learning and planning agent in linear motion control.
   """
   
-  def __init__(self, catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log):
+  def __init__(self, catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log, timestamp=None):
     super(TCatapultLPLinearSim, self).__init__()
     
     self.catapult = catapult
+    
+    self._BENCHMARK_TEST_EPISODES = 100
     
     self._FIXED_POS_INIT = self.catapult.POS_MIN
     self._FIXED_DURATION = self.catapult.DURATION_MIN
@@ -74,6 +76,10 @@ class TCatapultLPLinearSim(object):
     self._abs_dirpath_data = abs_dirpath_data
     self._abs_dirpath_model = os.path.join(abs_dirpath_model, './')
     self._abs_dirpath_log = abs_dirpath_log
+    
+    self._timestamp = timestamp
+    if timestamp is None:
+      self._timestamp = self._get_timestamp_str()
 
     loader_dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data, auto_init=False)
     loader_dataset.load_dataset()
@@ -84,6 +90,10 @@ class TCatapultLPLinearSim(object):
       if entry['action']['duration'] != self._FIXED_DURATION: is_valid = False
       if is_valid:
         self._dataset.append(entry)
+  
+  def _get_timestamp_str(self):
+    timestamp_str = '{:%Y%m%d_%H%M%S_%f}'.format(datetime.datetime.now())
+    return timestamp_str
   
   def _create_model(self, input_dim, output_dim, hiddens=[200, 200], max_updates=20000, should_load_model=False, prefix_info='catapult'):
     model = TNNRegression()
@@ -110,7 +120,7 @@ class TCatapultLPLinearSim(object):
     model.Init()
     
     return model
-
+  
   def _train_model(self, model, x_train, y_train):
     model.UpdateBatch(x_train, y_train)
   
@@ -122,7 +132,7 @@ class TCatapultLPLinearSim(object):
     logger.log('{} load mode. (dirpath={})'.format(prefix_info, self._abs_dirpath_model))
     model.Load(LoadYAML(self._abs_dirpath_model + 'nn_model.yaml'), self._abs_dirpath_model)
   
-  def _estimate_model_quality(self, model, x_train, y_train, x_valid, y_valid, should_plot=True, plot_density=100):
+  def _estimate_model_quality(self, model, x_train, y_train, x_valid, y_valid, should_plot=False, should_savefig=False, postfix_savefig='model', plot_density=100):
     assert(len(x_valid) > 0)
     assert(len(y_valid) > 0)
     assert(len(x_valid[0]) == 1)
@@ -168,44 +178,48 @@ class TCatapultLPLinearSim(object):
     ave_stderr_y   = acc_stderr_y / len(y_stderr)
     ave_stderr_err = acc_stderr_err / len(err_stderr)
     
+    # plotting
+    plot_x_train  = [(x[0]) for x in x_train]
+    plot_y_train  = [(y[0]) for y in y_train]
+    
+    x_min = x_valid[0][0]
+    x_max = x_valid[0][0]
+    for x in x_valid:
+      if x[0] < x_min: x_min = x[0]
+      if x[0] > x_max: x_max = x[0]
+    plot_x_model = [(x_min + i * (x_max - x_min) / plot_density) for i in range(plot_density + 1)]
+    
+    plot_y_model   = []
+    plot_err_model = []
+    for i in range(len(plot_x_model)):
+      prediction = model.Predict([plot_x_model[i]], x_var=0.0**2, with_var=True, with_grad=True)
+      h_i    = prediction.Y.ravel() # hypothesis
+      err_i  = np.sqrt(np.diag(prediction.Var))
+      grad_i = prediction.Grad.ravel()
+      plot_y_model.append(h_i[0])
+      plot_err_model.append(err_i[0])
+    
+    plt.figure(1)
+    plt.clf()
+    
+    plt.plot(plot_x_train, plot_y_train, 'bx')
+    plt.errorbar(plot_x_model, plot_y_model, plot_err_model, color='r', linestyle='-')
+    plt.grid(True)
+    
     if should_plot:
-      plot_x_train  = [(x[0]) for x in x_train]
-      plot_y_train  = [(y[0]) for y in y_train]
-      
-      x_min = x_valid[0][0]
-      x_max = x_valid[0][0]
-      for x in x_valid:
-        if x[0] < x_min: x_min = x[0]
-        if x[0] > x_max: x_max = x[0]
-      plot_x_model = [(x_min + i * (x_max - x_min) / plot_density) for i in range(plot_density + 1)]
-      
-      plot_y_model   = []
-      plot_err_model = []
-      for i in range(len(plot_x_model)):
-        prediction = model.Predict([plot_x_model[i]], x_var=0.0**2, with_var=True, with_grad=True)
-        h_i    = prediction.Y.ravel() # hypothesis
-        err_i  = np.sqrt(np.diag(prediction.Var))
-        grad_i = prediction.Grad.ravel()
-        plot_y_model.append(h_i[0])
-        plot_err_model.append(err_i[0])
-      
-      plt.figure(1)
-      plt.clf()
-      
-      plt.plot(plot_x_train, plot_y_train, 'bx')
-      plt.errorbar(plot_x_model, plot_y_model, plot_err_model, color='r', linestyle='-')
-      plt.grid(True)
-      
       plt.show()
+    
+    if should_savefig:
+      plt.savefig(os.path.join(self._abs_dirpath_log, 'test_' + self._timestamp + '_' + postfix_savefig + '.svg'), format='svg')
     
     return float(ave_stderr_y), float(ave_stderr_err)
 
-  def _estimate_test_results(self, test_results, should_save=True):
+  def _estimate_test_results(self, test_results, should_save=True, should_plot=False, should_savefig=False, postfix_savefig='results'):
     prefix = 'estimate_test_results'
     prefix_info = prefix + ':'
     
     if should_save:
-      filename_test_results = 'test_' + '{:%Y%m%d_%H%M%S_%f}'.format(datetime.datetime.now()) + '.yaml'
+      filename_test_results = 'test_' + self._timestamp + '.yaml'
       filepath_test_results = os.path.abspath(os.path.join(self._abs_dirpath_log, filename_test_results))
       with open(filepath_test_results, 'w') as yaml_file:
         yaml.dump(test_results, yaml_file, default_flow_style=False)
@@ -247,7 +261,11 @@ class TCatapultLPLinearSim(object):
     plt.plot(samples_actual_loc_land, samples_actual_loc_land, 'b-')
     plt.plot(samples_test_desired_loc_land, samples_test_loc_land, 'ro')
     
-    plt.show()
+    if should_plot:
+      plt.show()
+    
+    if should_savefig:
+      plt.savefig(os.path.join(self._abs_dirpath_log, 'test_' + self._timestamp + '_' + postfix_savefig + '.svg'), format='svg')
 
   def _run_model_based_offline(self):
     """
@@ -369,7 +387,7 @@ class TCatapultLPLinearSim(object):
     
     # Configurations
     CONFIG_PREOPT_SAMPLES_N = 5
-    CONFIG_TEST_SAMPLES_N = 40
+    CONFIG_TEST_SAMPLES_N = self._BENCHMARK_TEST_EPISODES
     
     # Test result entry items
     if optimizer == 'cma':
@@ -483,14 +501,14 @@ class TCatapultLPLinearSim(object):
       model_dynamics.Update([pos_target], [loc_land], not_learn=False)
     
     # Estimate test results
-    self._estimate_test_results(test_results)
+    self._estimate_test_results(test_results, should_save=True, should_plot=False, should_savefig=True, postfix_savefig=(optimizer + '_results'))
 
     # Estimate dynamics model
     self._estimate_model_quality(
       model_dynamics, 
       X_train_dynamics, Y_train_dynamics, 
       X_valid_dynamics, Y_valid_dynamics, 
-      should_plot=True
+      should_plot=False, should_savefig=True, postfix_savefig=(optimizer + '_dynamics')
     )
   
   def _run_model_based_online_cma(self):
@@ -1650,7 +1668,7 @@ class TCatapultLPLinearSim(object):
     CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N = 4
     CONFIG_ACTION_REPLAN_ERR_THRESHOLD = 0.05 * (CONFIG_ESTIMATED_LOC_LAND_MAX - CONFIG_ESTIMATED_LOC_LAND_MIN)
 
-    CONFIG_TEST_SAMPLES_N = 40
+    CONFIG_TEST_SAMPLES_N = self._BENCHMARK_TEST_EPISODES
 
     # Test result entry items
     if optimizer == 'cma':
@@ -1788,7 +1806,7 @@ class TCatapultLPLinearSim(object):
         Y_train_policy = Y
         self._train_model(model_policy, X, Y)
         
-        self._estimate_model_quality(model_policy, X_train_policy, Y_train_policy, X_valid_policy, Y_valid_policy, should_plot=False)
+        #self._estimate_model_quality(model_policy, X_train_policy, Y_train_policy, X_valid_policy, Y_valid_policy, should_plot=True)
       
       # Predict initial guess by policy network
       prediction = model_policy.Predict([desired_loc_land], x_var=0.0**2, with_var=True, with_grad=True)
@@ -1889,14 +1907,14 @@ class TCatapultLPLinearSim(object):
       model_dynamics.Update([pos_target], [loc_land], not_learn=False)
     
     # Estimate test results
-    self._estimate_test_results(test_results)
+    self._estimate_test_results(test_results, should_save=True, should_plot=False, should_savefig=True, postfix_savefig=(optimizer + '_results'))
 
     # Estimate dynamics model
     self._estimate_model_quality(
       model_dynamics, 
       X_train_dynamics, Y_train_dynamics, 
       X_valid_dynamics, Y_valid_dynamics, 
-      should_plot=True
+      should_plot=False, should_savefig=True, postfix_savefig=(optimizer + '_dynamics')
     )
 
     # Estimate policy network
@@ -1904,7 +1922,7 @@ class TCatapultLPLinearSim(object):
       model_policy, 
       X_train_policy, Y_train_policy, 
       X_valid_policy, Y_valid_policy, 
-      should_plot=True
+      should_plot=False, should_savefig=True, postfix_savefig=(optimizer + '_policy')
     )
   
   def _run_hybrid_nng_cma(self):
@@ -1967,6 +1985,8 @@ class TCatapultLPLinearSim(object):
 
 
 if __name__ == '__main__':
+  TEST_ROUNDS = 9
+  
   operation = None
   catapult_model = None
   catapult_instance = None
@@ -1988,8 +2008,10 @@ if __name__ == '__main__':
   abs_dirpath_data = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/catapult_' + catapult_name))
   abs_dirpath_model = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/model_' + catapult_name))
   abs_dirpath_log = os.path.abspath(os.path.join(os.path.dirname(__file__), '../data/log_' + catapult_name))
-  agent = TCatapultLPLinearSim(catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log)
   
-  agent.run(operation)
+  for i in range(TEST_ROUNDS):
+    print('TEST_ROUND = {}/{}'.format(i+1, TEST_ROUNDS))
+    agent = TCatapultLPLinearSim(catapult, abs_dirpath_data, abs_dirpath_model, abs_dirpath_log)
+    agent.run(operation)
 
 
