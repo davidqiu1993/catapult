@@ -59,6 +59,7 @@ class TCatapultSim(object):
       self.DURATION_MIN = 0.50
     else:
       assert(False)
+    self.model = catapult_model
     
     self.MOTION_LINEAR = 'linear'
     self.MOTION_CUSTOM = 'custom'
