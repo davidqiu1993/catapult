@@ -65,7 +65,7 @@ class TCatapultLPLinearSim(object):
     self._POS_TARGET_MAX = self.catapult.POS_MAX
     if self.catapult.model == '001_02':
       self._ESTIMATED_LOC_LAND_MIN = 0.0
-      self._ESTIMATED_LOC_LAND_MAX = 58
+      self._ESTIMATED_LOC_LAND_MAX = 30.0
     elif self.catapult.model == '002_02':
       self._ESTIMATED_LOC_LAND_MIN = -1.0
       self._ESTIMATED_LOC_LAND_MAX = 98.0
@@ -437,7 +437,7 @@ class TCatapultLPLinearSim(object):
     self._train_model(model_dynamics, X, Y)
     
     # Test desired landing locations
-    test_samples_desired_loc_land = [float(0.0 + np.random.sample() * 100.0) for i in range(CONFIG_TEST_SAMPLES_N)]
+    test_samples_desired_loc_land = [float(self._ESTIMATED_LOC_LAND_MIN + np.random.sample() * (self._ESTIMATED_LOC_LAND_MAX - self._ESTIMATED_LOC_LAND_MIN)) for i in range(CONFIG_TEST_SAMPLES_N)]
     test_results = []
     for i_sample in range(len(test_samples_desired_loc_land)):
       desired_loc_land = test_samples_desired_loc_land[i_sample]
