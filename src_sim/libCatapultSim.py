@@ -47,7 +47,7 @@ class TCatapultSim(object):
     
     if catapult_model == '001_02':
       self.POS_MIN  = 0.00 * math.pi
-      self.POS_MAX  = 0.80 * math.pi
+      self.POS_MAX  = 0.75 * math.pi
       self.POS_MID  = 0.50 * math.pi
       self.POS_INIT = 0.00 * math.pi
       self.DURATION_MIN = 0.10
