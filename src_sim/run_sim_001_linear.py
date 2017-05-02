@@ -61,9 +61,16 @@ class TCatapultLPLinearSim(object):
     dataset = TCatapultDatasetSim(abs_dirpath=self._abs_dirpath_data)
     
     if self.catapult.model == '001_02':
+      """
+      pos_target_start    = 2.25
+      pos_target_end      = self.catapult.POS_MAX
+      pos_target_samples  = 200
+      pos_target_interval = (pos_target_end - pos_target_start) / pos_target_samples
+      """
       feature_dict = {
         'pos_init': [0.0],
-        'pos_target': np.array([(0.0 + i*0.005) for i in range(int((0.80-0.0) / 0.005) + 1)]) * math.pi,
+        'pos_target': np.array([(0.0 + i*0.005) for i in range(int((0.75-0.0) / 0.005) + 1)]) * math.pi,
+        #'pos_target': [(pos_target_start + i*pos_target_interval) for i in range(pos_target_samples + 1)],
         'duration': [0.10]
       }
     elif self.catapult.model == '002_02':
