@@ -61,8 +61,12 @@ class TCatapultLPLinearSim(object):
     self._FIXED_DURATION = self.catapult.DURATION_MIN
     self._POS_TARGET_MIN = self.catapult.POS_MIN + 0.01 * math.pi
     self._POS_TARGET_MAX = self.catapult.POS_MAX
-    self._ESTIMATED_LOC_LAND_MIN = -1.0
-    self._ESTIMATED_LOC_LAND_MAX = 98.0
+    if self.catapult.model == '001_02':
+      self._ESTIMATED_LOC_LAND_MIN = 0.0
+      self._ESTIMATED_LOC_LAND_MAX = 58
+    elif self.catapult.model == '002_02':
+      self._ESTIMATED_LOC_LAND_MIN = -1.0
+      self._ESTIMATED_LOC_LAND_MAX = 98.0
     
     self._SHOULD_LOAD_MODEL = False
     self._SHOULD_SAVE_MODEL = False
