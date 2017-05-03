@@ -37,6 +37,9 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/base'))
 from base_ml_dnn import TNNRegression
 from base_util import LoadYAML, SaveYAML
 
+sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/multilinear'))
+from libMultilinearApproximators import TMultilinearApproximators
+
 try:
   input = raw_input
 except NameError:
@@ -57,7 +60,8 @@ class TCatapultLPLinearSim(object):
     
     self.catapult = catapult
     
-    self._BENCHMARK_TEST_EPISODES = 100
+    self._BENCHMARK_PREOPT_SAMPLES = 5
+    self._BENCHMARK_TEST_EPISODES  = 100
     
     self._FIXED_POS_INIT = self.catapult.POS_MIN
     self._FIXED_DURATION = self.catapult.DURATION_MIN
@@ -202,7 +206,7 @@ class TCatapultLPLinearSim(object):
     plt.figure(1)
     plt.clf()
     
-    plt.plot(plot_x_train, plot_y_train, 'bx')
+    plt.plot(plot_x_train, plot_y_train, 'ro')
     plt.errorbar(plot_x_model, plot_y_model, plot_err_model, color='r', linestyle='-')
     plt.grid(True)
     
@@ -213,6 +217,24 @@ class TCatapultLPLinearSim(object):
       plt.savefig(os.path.join(self._abs_dirpath_log, 'test_' + self._timestamp + '_' + postfix_savefig + '.svg'), format='svg')
     
     return float(ave_stderr_y), float(ave_stderr_err)
+
+  def _evaluate_multilinear_approximators_quality(self, approximators, X_train_list, Y_train_list, X_valid, Y_valid, should_plot=False, should_savefig=False, postfix_savefig='multilinear_approximators'):
+    X = [self._ESTIMATED_LOC_LAND_MIN, self._ESTIMATED_LOC_LAND_MAX]
+    Y_list = approximators.predict(X)
+    
+    plt.figure(1)
+    plt.clf()
+    
+    for i in range(len(approximators.getApproximators())):
+      plt.plot(X, Y_list[i], 'r-')
+    plt.plot(X_valid, Y_valid, 'bx')
+    plt.grid(True)
+    
+    if should_plot:
+      plt.show()
+    
+    if should_savefig:
+      plt.savefig(os.path.join(self._abs_dirpath_log, 'test_' + self._timestamp + '_' + postfix_savefig + '.svg'), format='svg')
 
   def _estimate_test_results(self, test_results, should_save=True, should_plot=False, should_savefig=False, postfix_savefig='results'):
     prefix = 'estimate_test_results'
@@ -386,7 +408,7 @@ class TCatapultLPLinearSim(object):
     prefix_info = prefix + ':'
     
     # Configurations
-    CONFIG_PREOPT_SAMPLES_N = 5
+    CONFIG_PREOPT_SAMPLES_N = self._BENCHMARK_PREOPT_SAMPLES
     CONFIG_TEST_SAMPLES_N = self._BENCHMARK_TEST_EPISODES
     
     # Test result entry items
@@ -732,8 +754,8 @@ class TCatapultLPLinearSim(object):
     prefix_info = prefix + ':'
     
     # Configurations
-    CONFIG_PREOPT_SAMPLES_N = 5
-    CONFIG_TEST_SAMPLES_N = 40
+    CONFIG_PREOPT_SAMPLES_N = self._BENCHMARK_PREOPT_SAMPLES
+    CONFIG_TEST_SAMPLES_N = self._BENCHMARK_TEST_EPISODES
     
     # Test result entry items
     test_result_approach = 'model-free, online, NN(policy; deterministic), policy(action)'
@@ -1662,7 +1684,7 @@ class TCatapultLPLinearSim(object):
     CONFIG_POS_TARGET_MIN = self._POS_TARGET_MIN
     CONFIG_POS_TARGET_MAX = self._POS_TARGET_MAX
 
-    CONFIG_PREOPT_SAMPLES_N = 5
+    CONFIG_PREOPT_SAMPLES_N = self._BENCHMARK_PREOPT_SAMPLES
     CONFIG_POLICY_UPDATE_ROUND = 5
     CONFIG_POLICY_UPDATE_SAMPLES_PAST_N = 12
     CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N = 4
@@ -1948,10 +1970,281 @@ class TCatapultLPLinearSim(object):
       - [model-based if err>threshold]
     """
     return self._run_hybrid_nng(optimizer='gd')
-  
-  def _run_hybrid_multilinear(self):
-    #TODO: hybrid model-based and model-free; multilinear policy as model-free component
-    assert(False)
+    
+  def _run_hybrid_multilinear_gd(self):
+    """
+    hybrid:
+      - online
+      - NN(dynamics)
+      - multilinear(policy; NN(dynamics), MB(state))
+      - policy(init_actions_list)
+      - GD(action_candidates; init_actions_list)
+      - [model-based if err>threshold]
+    """
+    prefix = 'catapult_sim/hybrid_multilinear_gd'
+    prefix_info = prefix + ':'
+
+    # Configurations
+    CONFIG_PREOPT_SAMPLES_N = self._BENCHMARK_PREOPT_SAMPLES
+    CONFIG_TEST_SAMPLES_N = self._BENCHMARK_TEST_EPISODES
+    
+    CONFIG_POLICY_UPDATE_ROUND = 5
+    CONFIG_POLICY_UPDATE_SAMPLES_PAST_N = 12
+    CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N = 4
+    CONFIG_ACTION_REPLAN_ERR_THRESHOLD = 0.05 * (self._ESTIMATED_LOC_LAND_MAX - self._ESTIMATED_LOC_LAND_MIN)
+    
+    CONFIG_MULTILINEAR_APPROXIMATORS_N = 20
+    
+    # Test result entry items
+    test_result_approach = 'hybrid, online, NN(dynamics), multilinear(policy; NN(dynamics), MB(state)), policy(init_actions_list), GD(action_candidates; init_actions_list), [model-based if err>threshold]'
+    test_result_desired_loc_land = None
+    test_result_loc_land = None
+    test_result_pos_target = None
+    test_result_preopt_samples = CONFIG_PREOPT_SAMPLES_N
+    test_result_samples = None
+    test_result_preopt_simulations = 0
+    test_result_simulations = None
+    test_result_approximators = CONFIG_MULTILINEAR_APPROXIMATORS_N
+    test_result_should_replan = None
+    test_result_has_replan_improved = None
+
+    # Load validation datasets
+    validation_datasets = self._load_validation_datasets()
+    X_valid_dynamics = validation_datasets['X_valid_dynamics']
+    Y_valid_dynamics = validation_datasets['Y_valid_dynamics']
+    X_valid_policy = validation_datasets['X_valid_policy']
+    Y_valid_policy = validation_datasets['Y_valid_policy']
+
+    # Define dynamics model online training dataset
+    X_train_dynamics = []
+    Y_train_dynamics = []
+
+    # Define multilinear policy last training datasets list
+    X_train_policy_list = []
+    Y_train_policy_list = []
+
+    # Collect random samples from true dynamics
+    preopt_samples_n = CONFIG_PREOPT_SAMPLES_N
+    preopt_samples_pos_target = []
+    preopt_samples_loc_land = []
+    for i in range(preopt_samples_n):
+      pos_target = float(self._POS_TARGET_MIN + np.random.sample() * (self._POS_TARGET_MAX - self._POS_TARGET_MIN))
+      loc_land = self.catapult.throw_linear(self._FIXED_POS_INIT, pos_target, self._FIXED_DURATION)
+      preopt_samples_pos_target.append(float(pos_target))
+      preopt_samples_loc_land.append(float(loc_land))
+      logger.log('{} sample randomly from true dynamics. (pos_target: {}, loc_land: {})'.format(prefix_info, pos_target, loc_land))
+
+    # Create dynamics model
+    model_dynamics = self._create_model(1, 1, hiddens=[200, 200], max_updates=10000, should_load_model=False, prefix_info=prefix_info)
+
+    # Train dynamics model with random samples
+    logger.log('{} train dynamics model with random samples. (preopt_samples_n: {})'.format(prefix_info, preopt_samples_n))
+    X = [[preopt_samples_pos_target[i]] for i in range(preopt_samples_n)]
+    Y = [[preopt_samples_loc_land[i]] for i in range(preopt_samples_n)]
+    for i in range(preopt_samples_n):
+      X_train_dynamics.append(X[i])
+      Y_train_dynamics.append(Y[i])
+    self._train_model(model_dynamics, X, Y)
+
+    # Create initial multilinear policy approximators
+    policy_approximators = TMultilinearApproximators(self._POS_TARGET_MIN, self._POS_TARGET_MAX, n_approximators=CONFIG_MULTILINEAR_APPROXIMATORS_N)
+
+    # Test with test samples
+    test_samples_desired_loc_land = [float(self._ESTIMATED_LOC_LAND_MIN + np.random.sample() * (self._ESTIMATED_LOC_LAND_MAX - self._ESTIMATED_LOC_LAND_MIN)) for i in range(CONFIG_TEST_SAMPLES_N)]
+    experience_desired_loc_land = []
+    test_results = []
+    for i_sample in range(len(test_samples_desired_loc_land)):
+      desired_loc_land = test_samples_desired_loc_land[i_sample]
+      experience_desired_loc_land.append(desired_loc_land)
+
+      test_result_desired_loc_land = desired_loc_land
+      test_result_loc_land = 0
+      test_result_pos_target = 0
+      test_result_samples = 0
+      test_result_simulations = 0
+      test_result_should_replan = False
+      test_result_has_replan_improved = False
+
+      # Update multilinear policy approximators with latest dynamics model
+      if i_sample % CONFIG_POLICY_UPDATE_ROUND == 0:
+        policy_update_samples_past_n = min(len(experience_desired_loc_land), CONFIG_POLICY_UPDATE_SAMPLES_PAST_N)
+        policy_update_samples_random_n = CONFIG_POLICY_UPDATE_SAMPLES_PAST_N + CONFIG_POLICY_UPDATE_SAMPLES_RANDOM_N - policy_update_samples_past_n
+        logger.log('{} update multilinear policy approximators with latest dynamics model. (experience_samples: {}, random_samples: {})'.format(prefix_info, policy_update_samples_past_n, policy_update_samples_random_n))
+
+        # Cache previous multilinear policy approximators
+        prev_policy_approximators = policy_approximators
+
+        # Create new multilinear policy approximators
+        policy_approximators = TMultilinearApproximators(self._POS_TARGET_MIN, self._POS_TARGET_MAX, n_approximators=CONFIG_MULTILINEAR_APPROXIMATORS_N)
+        
+        # Generate training samples from dynamics model in state space
+        policy_update_samples_desired_loc_land_list = [[] for i in range(CONFIG_MULTILINEAR_APPROXIMATORS_N)]
+        policy_update_samples_past_list = [random.sample(experience_desired_loc_land, policy_update_samples_past_n) for i in range(CONFIG_MULTILINEAR_APPROXIMATORS_N)]
+        for j in range(CONFIG_MULTILINEAR_APPROXIMATORS_N):
+          for i in range(policy_update_samples_past_n):
+            policy_update_samples_desired_loc_land_list[j].append(policy_update_samples_past_list[j][i])
+          for i in range(policy_update_samples_random_n):
+            policy_update_sample = float(self._ESTIMATED_LOC_LAND_MIN + np.random.sample() * (self._ESTIMATED_LOC_LAND_MAX - self._ESTIMATED_LOC_LAND_MIN))
+            policy_update_samples_desired_loc_land_list[j].append(policy_update_sample)
+
+        # Apply model-based method to find optimal actions for generated samples
+        policy_update_samples_pos_target_list = [[] for i in range(CONFIG_MULTILINEAR_APPROXIMATORS_N)]
+        test_result_preopt_simulations = 0
+        for j in range(CONFIG_MULTILINEAR_APPROXIMATORS_N):
+          for i in range(len(policy_update_samples_desired_loc_land_list[j])):
+            policy_update_sample_desired_loc_land = policy_update_samples_desired_loc_land_list[j][i]
+            
+            """
+            # Predict with previous policy
+            pos_target_h = prev_policy_approximators.predictByApproximator(j, policy_update_sample_desired_loc_land)
+            """
+            # Predict with new initial policy
+            pos_target_h = policy_approximators.predictByApproximator(j, policy_update_sample_desired_loc_land)
+            
+            # Optimize with gradient descent over dynamics model
+            options = {
+              'init_pos_target': self._fix_range(pos_target_h, self._POS_TARGET_MIN, self._POS_TARGET_MAX),
+              'bounds': [self._POS_TARGET_MIN, self._POS_TARGET_MAX],
+              'verbose': False
+            }
+            optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, policy_update_sample_desired_loc_land, 'gd', options)
+            policy_update_samples_pos_target_list[j].append(optimal_pos_target)
+            test_result_preopt_simulations += n_iter
+            logger.log('{} generate policy update sample. (desired_loc_land: {}, pos_target: {}, n_iter: {}/{})'.format(prefix_info, policy_update_sample_desired_loc_land, optimal_pos_target, n_iter, test_result_preopt_simulations))
+        
+        # Train multilinear policy approximators
+        X_train_policy_list = policy_update_samples_desired_loc_land_list
+        Y_train_policy_list = policy_update_samples_pos_target_list
+        policy_approximators.update(X_train_policy_list, Y_train_policy_list)
+        
+        # Evaluate policy approximators
+        # ...
+      
+      # Predict initial guesses by policy
+      pos_target_h_list = policy_approximators.predict(desired_loc_land)
+      logger.log('{} predict initial guesses by multilinear policy approximators. (desired_loc_land: {}) >>>'.format(prefix_info, desired_loc_land))
+      logger.log('pos_target_h_list = {}'.format(pos_target_h_list))
+      
+      # Optimize action candidates by gradient descent over dynamics model from initial guesses
+      optimal_pos_target_list = []
+      for i in range(CONFIG_MULTILINEAR_APPROXIMATORS_N):
+        options = {
+          'init_pos_target': self._fix_range(pos_target_h_list[i], self._POS_TARGET_MIN, self._POS_TARGET_MAX),
+          'bounds': [self._POS_TARGET_MIN, self._POS_TARGET_MAX],
+          'verbose': False
+        }
+        optimal_pos_target, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'gd', options)
+        optimal_pos_target_list.append(optimal_pos_target)
+        test_result_simulations += n_iter
+        logger.log('{} optimize action by gradient descent over dynamics model from initial guess. (desired_loc_land: {}, candidate: {}/{}, init_pos_target: {}, optimal_pos_target: {}, n_iter: {})'.format(
+          prefix_info, desired_loc_land, i+1, CONFIG_MULTILINEAR_APPROXIMATORS_N, options['init_pos_target'], optimal_pos_target, n_iter))
+      
+      # Evaluate optimal action candidates quality by dynamics model
+      loc_land_h_list = []
+      loc_land_err_list = []
+      quality_err_list = []
+      best_candidate_index = None
+      best_candidate_quality_err = None
+      for i in range(CONFIG_MULTILINEAR_APPROXIMATORS_N):
+        prediction = model_dynamics.Predict([optimal_pos_target_list[i]], x_var=0.0**2, with_var=True, with_grad=True)
+        loc_land_h   = (prediction.Y.ravel())[0]
+        loc_land_err = (np.sqrt(np.diag(prediction.Var)))[0]
+        loc_land_h_list.append(loc_land_h)
+        loc_land_err_list.append(loc_land_err)
+
+        quality_err = abs(desired_loc_land - loc_land_h)
+        quality_err_list.append(quality_err)
+        logger.log('{} evaluate optimal action candidate quality by dynamics model. (candidate: {}/{}, desired_loc_land: {}, loc_land_h: {}, err: {})'.format(
+          prefix_info, i+1, CONFIG_MULTILINEAR_APPROXIMATORS_N, desired_loc_land, loc_land_h, quality_err))
+        
+        if best_candidate_index is None or best_candidate_quality_err is None or best_candidate_quality_err > quality_err:
+          best_candidate_index = i
+          best_candidate_quality_err = quality_err
+      
+      optimal_pos_target_final = optimal_pos_target_list[best_candidate_index]
+      
+      # Evaluate best optimal action candidate
+      should_replan = (best_candidate_quality_err > CONFIG_ACTION_REPLAN_ERR_THRESHOLD)
+      logger.log('{} Evaluate best optimal action candidate. (candidate: {}, should_replan: {}, err: {}/{})'.format(
+        prefix_info, best_candidate_index, should_replan, best_candidate_quality_err, CONFIG_ACTION_REPLAN_ERR_THRESHOLD))
+
+      # Replan with CMA-ES as pure model-based approach backup
+      if should_replan:
+        test_result_should_replan = True
+        options = {
+          'init_pos_target': self._fix_range(pos_target_h_list[best_candidate_index], self._POS_TARGET_MIN, self._POS_TARGET_MAX),
+          'init_var': (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * 1.0,
+          'bounds': [[self._POS_TARGET_MIN, self._POS_TARGET_MIN], [self._POS_TARGET_MAX, self._POS_TARGET_MAX]],
+          'verbose': False
+        }
+        optimal_pos_target_replan, n_iter = self._solve_for_pos_target_mb(model_dynamics, desired_loc_land, 'cma', options)
+        test_result_simulations += n_iter
+
+        prediction = model_dynamics.Predict([optimal_pos_target_replan], x_var=0.0**2, with_var=True, with_grad=True)
+        loc_land_h_replan   = (prediction.Y.ravel())[0]
+        loc_land_err_replan = (np.sqrt(np.diag(prediction.Var)))[0]
+        
+        quality_err_replan = abs(desired_loc_land - loc_land_h_replan)
+        has_replan_improved = (quality_err_replan < best_candidate_quality_err)
+        test_result_has_replan_improved = has_replan_improved
+        if has_replan_improved:
+          optimal_pos_target_final = optimal_pos_target_replan
+
+        logger.log('{} replan by model-based approach. (has_replan_improved: {}, optimal_pos_target: {} ({}, {}), n_iter: {})'.format(
+          prefix_info, has_replan_improved, optimal_pos_target_final, optimal_pos_target_list[best_candidate_index], optimal_pos_target_replan, n_iter))
+
+      # Test in true dynamics
+      pos_target = float(self._fix_range(optimal_pos_target_final, self._POS_TARGET_MIN, self._POS_TARGET_MAX))
+      loc_land = self.catapult.throw_linear(self._FIXED_POS_INIT, pos_target, self._FIXED_DURATION)
+      logger.log('{} test in true dynamics. (desired_loc_land: {}, loc_land: {}, pos_target: {}'.format(
+        prefix_info, desired_loc_land, loc_land, pos_target))
+
+      test_result_samples = i_sample
+      test_result_pos_target = pos_target
+      test_result_loc_land = loc_land
+
+      # Add to test results
+      entry = {
+        'approach': str(test_result_approach),
+        'desired_loc_land': float(test_result_desired_loc_land),
+        'loc_land': float(test_result_loc_land),
+        'pos_target': float(test_result_pos_target),
+        'preopt_samples': int(test_result_preopt_samples),
+        'samples': int(test_result_samples),
+        'preopt_simulations': int(test_result_preopt_simulations),
+        'simulations': int(test_result_simulations),
+        'approximators': int(test_result_approximators),
+        'should_replan': bool(test_result_should_replan),
+        'has_replan_improved': bool(test_result_has_replan_improved)
+      }
+      test_results.append(entry)
+      logger.log('{} test result added to temperary result dataset >>> '.format(prefix_info))
+      logger.log(entry)
+      
+      # Update dynamics model
+      logger.log('{} update dynamics model. (pos_target: {}, loc_land: {})'.format(prefix_info, pos_target, loc_land))
+      X_train_dynamics.append([pos_target])
+      Y_train_dynamics.append([loc_land])
+      model_dynamics.Update([pos_target], [loc_land], not_learn=False)
+    
+    # Evaluate test results
+    self._estimate_test_results(test_results, should_save=True, should_plot=False, should_savefig=True, postfix_savefig='gd_results')
+
+    # Evaluate dynamics model
+    self._estimate_model_quality(
+      model_dynamics, 
+      X_train_dynamics, Y_train_dynamics, 
+      X_valid_dynamics, Y_valid_dynamics, 
+      should_plot=False, should_savefig=True, postfix_savefig='gd_dynamics'
+    )
+
+    # Evaluate multilinear policy approximators
+    self._evaluate_multilinear_approximators_quality(
+      policy_approximators,
+      X_train_policy_list, Y_train_policy_list,
+      X_valid_policy, Y_valid_policy,
+      should_plot=False, should_savefig=True, postfix_savefig='gd_policy'
+    )
   
   def _run_hybrid_hybrid(self):
     #TODO: hybrid model-based and model-free; hybrid NNG and multilinear as model-free component
@@ -1969,7 +2262,8 @@ class TCatapultLPLinearSim(object):
       'hybrid_nn2_offline': self._run_hybrid_nn2_offline,
       'hybrid_nn2_online': self._run_hybrid_nn2_online,
       'hybrid_nng_cma': self._run_hybrid_nng_cma,
-      'hybrid_nng_gd': self._run_hybrid_nng_gd
+      'hybrid_nng_gd': self._run_hybrid_nng_gd,
+      'hybrid_multilinear_gd': self._run_hybrid_multilinear_gd
     }
     return operation_dict
   
