@@ -235,7 +235,67 @@ class TCatapultLPLinearSim(object):
     
     if should_savefig:
       plt.savefig(os.path.join(self._abs_dirpath_log, 'test_' + self._timestamp + '_' + postfix_savefig + '.svg'), format='svg')
-
+  
+  def _evaluate_dynamics_policy(self, policy_type, model_dynamics, model_policy, X_valid_policy, Y_valid_policy, X_train_policy=None, Y_train_policy=None, should_plot=False, should_savefig=False, postfix_savefig='dynamics_policy', plot_density=100):
+    assert(policy_type in ['nn', 'multilinear'])
+    
+    plt.figure(1)
+    plt.clf()
+    
+    X_sample_dynamics = []
+    Y_sample_dynamics = []
+    for i in range(plot_density + 1):
+      x = self._POS_TARGET_MIN + i * (self._POS_TARGET_MAX - self._POS_TARGET_MIN) / plot_density
+      
+      prediction = model_dynamics.Predict([x], x_var=0.0**2, with_var=True, with_grad=True)
+      y = (prediction.Y.ravel())[0]
+      err = (np.sqrt(np.diag(prediction.Var)))[0]
+      grad = (prediction.Grad.ravel())[0]
+      
+      X_sample_dynamics.append(x)
+      Y_sample_dynamics.append(y)
+    
+    plt.plot(Y_sample_dynamics, X_sample_dynamics, 'b-')
+    
+    if policy_type == 'nn':
+      X_sample_policy = []
+      Y_sample_policy = []
+      errs_sample_policy = []
+      for i in range(plot_density + 1):
+        x = self._ESTIMATED_LOC_LAND_MIN + i * (self._ESTIMATED_LOC_LAND_MAX - self._ESTIMATED_LOC_LAND_MIN) / plot_density
+        
+        prediction = model_policy.Predict([x], x_var=0.0**2, with_var=True, with_grad=True)
+        y = (prediction.Y.ravel())[0]
+        err = (np.sqrt(np.diag(prediction.Var)))[0]
+        grad = (prediction.Grad.ravel())[0]
+        
+        X_sample_policy.append(x)
+        Y_sample_policy.append(y)
+        errs_sample_policy.append(err)
+      
+      plt.errorbar(X_sample_policy, Y_sample_policy, errs_sample_policy, color'r', linestyle='-')
+      if X_train_policy is not None and Y_train_policy is not None and len(X_train_policy) == len(Y_train_policy):
+        plt.plot(X_train_policy, Y_train_policy, 'ro')
+    
+    elif policy_type == 'multilinear':
+      approximators = model_policy
+      
+      X = [self._ESTIMATED_LOC_LAND_MIN, self._ESTIMATED_LOC_LAND_MAX]
+      Y_list = approximators.predict(X)
+    
+      for i in range(len(approximators.getApproximators())):
+        plt.plot(X, Y_list[i], 'r-')
+    
+    plt.plot(X_valid_policy, Y_valid_policy, 'bx')
+    
+    plt.grid(True)
+    
+    if should_plot:
+      plt.show()
+    
+    if should_savefig:
+      plt.savefig(os.path.join(self._abs_dirpath_log, 'test_' + self._timestamp + '_' + postfix_savefig + '.svg'), format='svg')  
+  
   def _estimate_test_results(self, test_results, should_save=True, should_plot=False, should_savefig=False, postfix_savefig='results'):
     prefix = 'estimate_test_results'
     prefix_info = prefix + ':'
@@ -1936,7 +1996,7 @@ class TCatapultLPLinearSim(object):
       model_dynamics, 
       X_train_dynamics, Y_train_dynamics, 
       X_valid_dynamics, Y_valid_dynamics, 
-      should_plot=False, should_savefig=True, postfix_savefig=(optimizer + '_dynamics')
+      should_plot=False, should_savefig=True, postfix_savefig=('hybrid_nng' + optimizer + '_dynamics')
     )
 
     # Estimate policy network
@@ -1944,7 +2004,15 @@ class TCatapultLPLinearSim(object):
       model_policy, 
       X_train_policy, Y_train_policy, 
       X_valid_policy, Y_valid_policy, 
-      should_plot=False, should_savefig=True, postfix_savefig=(optimizer + '_policy')
+      should_plot=False, should_savefig=True, postfix_savefig=('hybrid_nng' + optimizer + '_policy')
+    )
+    
+    # Evaluate dynamics and policy models
+    self._evaluate_dynamics_policy(
+      'nn', model_dynamics, model_policy, 
+      X_valid_policy, Y_valid_policy, 
+      X_train_policy=X_train_policy, Y_train_policy=Y_train_policy, 
+      should_plot=False, should_savefig=True, postfix_savefig=('hybrid_nng' + optimizer + '_dynamics_policy')
     )
   
   def _run_hybrid_nng_cma(self):
@@ -2235,7 +2303,7 @@ class TCatapultLPLinearSim(object):
       model_dynamics, 
       X_train_dynamics, Y_train_dynamics, 
       X_valid_dynamics, Y_valid_dynamics, 
-      should_plot=False, should_savefig=True, postfix_savefig='gd_dynamics'
+      should_plot=False, should_savefig=True, postfix_savefig='multilinear_gd_dynamics'
     )
 
     # Evaluate multilinear policy approximators
@@ -2243,7 +2311,15 @@ class TCatapultLPLinearSim(object):
       policy_approximators,
       X_train_policy_list, Y_train_policy_list,
       X_valid_policy, Y_valid_policy,
-      should_plot=False, should_savefig=True, postfix_savefig='gd_policy'
+      should_plot=False, should_savefig=True, postfix_savefig='multilinear_gd_policy'
+    )
+    
+    # Evaluate dynamics model and policy approximators
+    self._evaluate_dynamics_policy(
+      'multilinear', model_dynamics, policy_approximators, 
+      X_valid_policy, Y_valid_policy, 
+      X_train_policy=None, Y_train_policy=None, 
+      should_plot=False, should_savefig=True, postfix_savefig='multilinear_dynamics_policy'
     )
   
   def _run_hybrid_hybrid(self):
