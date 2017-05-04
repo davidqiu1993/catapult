@@ -1935,7 +1935,8 @@ class TCatapultLPLinearSim(object):
       if should_replan:
         test_result_should_replan = True
         options = {
-          'init_pos_target': self._fix_range(pos_target_h, CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX),
+          #'init_pos_target': self._fix_range(pos_target_h, CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MAX),
+          'init_pos_target': (self._POS_TARGET_MAX + self._POS_TARGET_MIN) / 2.0,
           'init_var': (CONFIG_POS_TARGET_MAX - CONFIG_POS_TARGET_MIN) * 1.0,
           'bounds': [[CONFIG_POS_TARGET_MIN, CONFIG_POS_TARGET_MIN], [CONFIG_POS_TARGET_MAX, CONFIG_POS_TARGET_MAX]],
           'verbose': False
@@ -2240,7 +2241,8 @@ class TCatapultLPLinearSim(object):
       if should_replan:
         test_result_should_replan = True
         options = {
-          'init_pos_target': self._fix_range(pos_target_h_list[best_candidate_index], self._POS_TARGET_MIN, self._POS_TARGET_MAX),
+          #'init_pos_target': self._fix_range(pos_target_h_list[best_candidate_index], self._POS_TARGET_MIN, self._POS_TARGET_MAX),
+          'init_pos_target': (self._POS_TARGET_MAX + self._POS_TARGET_MIN) / 2.0,
           'init_var': (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * 1.0,
           'bounds': [[self._POS_TARGET_MIN, self._POS_TARGET_MIN], [self._POS_TARGET_MAX, self._POS_TARGET_MAX]],
           'verbose': False
