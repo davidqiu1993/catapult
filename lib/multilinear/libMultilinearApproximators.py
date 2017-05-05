@@ -55,10 +55,14 @@ class TMultilinearApproximators(object):
       y_list = [(self.predictByApproximator(i, x)) for i in range(self._N_APPROXIMATORS)]
       return y_list
   
+  def flushForApproximator(self, approximatorIndex):
+    assert(0 <= approximatorIndex and approximatorIndex < self._N_APPROXIMATORS)
+    self._X_train_list[approximatorIndex] = []
+    self._Y_train_list[approximatorIndex] = []
+  
   def flush(self):
-    for i in range(self._N_APPROXIMATORS):
-      self._X_train_list[i] = []
-      self._Y_train_list[i] = []
+    for approximatorIndex in range(self._N_APPROXIMATORS):
+      self.flushForApproximator(approximatorIndex)
   
   def updateForApproximator(self, approximatorIndex, append_X_train, append_Y_train):
     assert(0 <= approximatorIndex and approximatorIndex < self._N_APPROXIMATORS)
