@@ -41,16 +41,11 @@ class TCatapultSimNN1D(object):
   @constant DURATION The duration.
   """
   
-  def __init__(self, modelName, dirpath_refdata, dirpath_refmodel):
+  def __init__(self, modelName, dirpath_data):
     """
     Initialize a catapult controller.
     """
     super(TCatapultSimNN1D, self).__init__()
-    
-    self._dirpath_refdata  = os.path.abspath(dirpath_refdata);
-    self._dirpath_refmodel = os.path.abspath(dirpath_refmodel);
-    if self._dirpath_refmodel[-1] != '/':
-      self._dirpath_refmodel += '/'
     
     if modelName == 'simNN_001':
       self.MOTION   = 'linear'
@@ -62,11 +57,17 @@ class TCatapultSimNN1D(object):
       assert(False)
     self.modelName = modelName
     
+    self._dirpath_data       = os.path.abspath(dirpath_data)
+    self._dirpath_refdataset = os.path.abspath(os.path.join(self._dirpath_data, 'catapult_' + self.modelName + '_referenceDataset'));
+    self._dirpath_refmodel   = os.path.abspath(os.path.join(self._dirpath_data, 'catapult_' + self.modelName + '_referenceModel'));
+    if self._dirpath_refmodel[-1] != '/':
+      self._dirpath_refmodel += '/'
+    
     self._dataset_dynamics = self._load_reference_dynamics_dataset()
     self._model_dynamics = self._load_reference_dynamics_model()
   
   def _load_reference_dynamics_dataset(self):
-    dataset = TCatapultDatasetSimNN(abs_dirpath=self._dirpath_refdata, auto_init=False)
+    dataset = TCatapultDatasetSimNN(abs_dirpath=self._dirpath_refdataset, auto_init=False)
     dataset.load_dataset()
     return dataset
   
@@ -155,7 +156,7 @@ class TCatapultSimNN1D(object):
 
 
 if __name__ == '__main__':
-  catapult = TCatapultSimNN1D('simNN_001', '../data/catapult_simNN_001_referenceData', '../data/catapult_simNN_001_referenceModel')
+  catapult = TCatapultSimNN1D('simNN_001', '../data/')
   loc_land = catapult.throw_linear(catapult.POS_MAX)
   print('pos_target = {}, loc_land = {}'.format(catapult.POS_MAX, loc_land))
   catapult.show_dynamics_model()
