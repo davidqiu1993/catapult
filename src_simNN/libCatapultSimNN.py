@@ -64,7 +64,8 @@ class TCatapultSimNN1D(object):
     self._model_dynamics = self._load_reference_dynamics_model()
   
   def _load_reference_dynamics_dataset(self):
-    dataset = TCatapultDatasetSimNN(abs_dirpath=self._dirpath_refdata)
+    dataset = TCatapultDatasetSimNN(abs_dirpath=self._dirpath_refdata, auto_init=False)
+    dataset.load_dataset()
     return dataset
   
   def _load_reference_dynamics_model(self):
