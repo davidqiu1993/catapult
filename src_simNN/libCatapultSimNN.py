@@ -49,6 +49,8 @@ class TCatapultSimNN1D(object):
     
     self._dirpath_refdata  = os.path.abspath(dirpath_refdata);
     self._dirpath_refmodel = os.path.abspath(dirpath_refmodel);
+    if self._dirpath_refmodel[-1] != '/':
+      self._dirpath_refmodel += '/'
     
     if modelName == 'simNN_001':
       self.MOTION   = 'linear'
