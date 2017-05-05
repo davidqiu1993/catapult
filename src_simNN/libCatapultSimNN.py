@@ -80,10 +80,10 @@ class TCatapultSimNN1D(object):
       'dropout_ratio':        0.01,
       'loss_stddev_stop':     1.0e-4,
       'loss_stddev_stop_err': 1.0e-6,
-      'batchsize':            64,
+      'batchsize':            100,
       #'num_check_stop':       50,
       #'loss_maf_alpha':       0.4,
-      'num_max_update':       20000,
+      'num_max_update':       40000,
       'gpu':                  -1,
       'verbose':              True,
       'n_units':              [1, 200, 200, 1]
