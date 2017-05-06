@@ -70,6 +70,8 @@ class TCatapultLPLinearSimNN(object):
     self._CONFIG_CMAES_POPSIZE = 20
     self._CONFIG_CMAES_VERBOSE = False
     self._CONFIG_GD_VERBOSE = False
+    self._CONFIG_MSGD_STSIZE = 20
+    self._CONFIG_MSGD_VERBOSE = True
     
     self._CONFIG_EVALUATION_PLOT_DENSITY = 100
     
@@ -461,6 +463,7 @@ class TCatapultLPLinearSimNN(object):
   
   def _launchModule_solveForAction_MB_CMAES(self, desired_loc_land, model_dynamics, options={}):
     """
+    CMA-ES
     options['init_pos_target']: initial guess of pos_target
     options['init_var']:        initial standard deviation for CMA-ES search
     """
@@ -506,6 +509,7 @@ class TCatapultLPLinearSimNN(object):
   
   def _launchModule_solveForAction_MB_GD(self, desired_loc_land, model_dynamics, options={}):
     """
+    Gradient Descent
     options['init_pos_target']: initial guess of pos_target
     """
     prefix_info = 'catapult/solveForAction_MB_GD:'
@@ -557,9 +561,44 @@ class TCatapultLPLinearSimNN(object):
       if self._CONFIG_GD_VERBOSE:
         logger.log('{} iter = {} ({}), alpha = {}, direction = {}, x_next = {}'.format(prefix_info, iteration, self._launchModule_solveForAction_MB_GD_iteration, alpha, direction, x))
     
-    optimal_pos_target = self._fix_range(x[0], self._POS_TARGET_MIN, self._POS_TARGET_MAX)
+    optimal_pos_target = self._fixRange(x[0], self._POS_TARGET_MIN, self._POS_TARGET_MAX)
     
     return optimal_pos_target, self._launchModule_solveForAction_MB_GD_iteration
+  
+  def _launchModule_solveForAction_MB_MSGD(self, desired_loc_land, model_dynamics, options={}):
+    """
+    Multistart Gradient Descent
+    """
+    prefix_info = 'catapult/solveForAction_MB_MSGD:'
+    
+    init_pos_target_list = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample(self._CONFIG_MSGD_STSIZE)
+    self._launchModule_solveForAction_MB_MSGD_iteration = 0
+    best_pos_target = None
+    best_loss = None
+    for i_start in range(len(init_pos_target_list)):
+      init_pos_target = init_pos_target_list[i_start]
+      options = {
+        'init_pos_target': float(init_pos_target)
+      }
+      optimal_pos_target, n_iter = self._launchModule_solveForAction_MB_GD(desired_loc_land, model_dynamics, options)
+      self._launchModule_solveForAction_MB_MSGD_iteration += n_iter
+      
+      prediction = model_dynamics.Predict([optimal_pos_target], with_var=True)
+      loc_land_h   = float((prediction.Y.ravel())[0])
+      loc_land_err = float((np.sqrt(np.diag(prediction.Var)))[0])
+      loss = 0.5 * (desired_loc_land - loc_land_h)**2
+      if best_pos_target is None:
+        best_pos_target = optimal_pos_target
+        best_loss = loss
+      elif loss < best_loss:
+        best_pos_target = optimal_pos_target
+        best_loss = loss
+      
+      if self._CONFIG_MSGD_VERBOSE:
+        logger.log('{} optimize action candidate by gradient descent (candidate: {}/{}, desired_loc_land: {}, loc_land_h: {}, loss: {}, pos_target: {} ({}), iter: {}/{})'.format(
+          prefix_info, i_start+1, self._CONFIG_MSGD_STSIZE, desired_loc_land, loc_land_h, loss, optimal_pos_target, init_pos_target, n_iter, self._launchModule_solveForAction_MB_MSGD_iteration))
+    
+    return best_pos_target, self._launchModule_solveForAction_MB_MSGD_iteration
   
   def launchApproach_MB_CMAES(self):
     """
@@ -583,7 +622,7 @@ class TCatapultLPLinearSimNN(object):
     samples_desired_loc_land = self._launchModule_generateTestSamples()
     for episode in range(len(samples_desired_loc_land)):
       desired_loc_land = samples_desired_loc_land[episode]
-      logger.log('{} episodic test (episode: {}, desired_loc_land: {})'.format(prefix_info, episode, desired_loc_land))
+      logger.log('{} episodic test (episode: {}, desired_loc_land: {})'.format(prefix_info, episode+1, desired_loc_land))
       
       # Optimize action by CMA-ES
       optimal_pos_target, n_iter = self._launchModule_solveForAction_MB_CMAES(desired_loc_land, model_dynamics)
@@ -623,6 +662,68 @@ class TCatapultLPLinearSimNN(object):
     self._evaluateNNDynamics(model_dynamics, X_train_dynamics, Y_train_dynamics)
     self._evaluateTrialResults(trialResults)
 
+  def launchApproach_MB_MSGD(self):
+    """
+    Model-based, Multistart-GD(action)
+    """
+    prefix_info = 'catapult/MB_MSGD:'
+    
+    X_train_dynamics = []
+    Y_train_dynamics = []
+    trialResults = []
+    
+    # Train dynamics model with initial random samples
+    logger.log('{} collect initial random samples'.format(prefix_info))
+    model_dynamics = self._createNNDynamics()
+    samples_dynamics = self._launchModule_collectInitialDynamicsSamples()
+    logger.log('{} train dynamics model with initial random samples'.format(prefix_info))
+    self._trainNNDynamics(model_dynamics, samples_dynamics)
+    
+    # For each episode
+    logger.log('{} generate test samples'.format(prefix_info))
+    samples_desired_loc_land = self._launchModule_generateTestSamples()
+    for episode in range(len(samples_desired_loc_land)):
+      desired_loc_land = samples_desired_loc_land[episode]
+      logger.log('{} episodic test (episode: {}, desired_loc_land: {})'.format(prefix_info, episode+1, desired_loc_land))
+      
+      # Optimize action by multistart gradient descent
+      optimal_pos_target, n_iter = self._launchModule_solveForAction_MB_MSGD(desired_loc_land, model_dynamics)
+      logger.log('{} optimize action by multistart gradient descent (desired_loc_land: {}, optimal_pos_target: {}, n_iter: {})'.format(
+        prefix_info, desired_loc_land, optimal_pos_target, n_iter))
+      
+      # Test in true dynamics
+      pos_target = optimal_pos_target
+      loc_land = self.catapult.throw_linear(optimal_pos_target)
+      logger.log('{} test in true dynamics (desired_loc_land: {}, loc_land: {}, pos_target: {})'.format(prefix_info, desired_loc_land, loc_land, pos_target))
+      
+      # Train dynamics model
+      X_train_dynamics.append(pos_target)
+      Y_train_dynamics.append(loc_land)
+      samples = [(pos_target, loc_land)]
+      logger.log('{} train dynamics model (samples: {})'.format(prefix_info, samples))
+      self._trainNNDynamics(model_dynamics, samples)
+      
+      # Add trial result entry
+      entry = {
+        'approach':           str('Model-based, Multistart-GD(action)'),
+        'desired_loc_land':   float(desired_loc_land),
+        'pos_target':         float(pos_target),
+        'loc_land':           float(loc_land),
+        'preopt_samples':     int(self._BENCHMARK_INIT_SAMPLES_N),
+        'preopt_simulations': int(0),
+        'samples':            int(episode),
+        'simulations':        int(n_iter)
+      }
+      trialResults.append(entry)
+      logger.log('{} add trial result entry >>>'.format(prefix_info))
+      logger.log(entry)
+      
+      logger.log('')
+    
+    # Evaluate
+    self._evaluateNNDynamics(model_dynamics, X_train_dynamics, Y_train_dynamics)
+    self._evaluateTrialResults(trialResults)
+
 
 
 if __name__ == '__main__':
@@ -633,6 +734,7 @@ if __name__ == '__main__':
     rounds = int(sys.argv[2])
   else:
     print('usage: ./run_simNN_001_linear_thetaT_d <approach> <rounds>')
+    quit()
   
   abs_dirpath_data = os.path.abspath('../data')
   
@@ -644,5 +746,10 @@ if __name__ == '__main__':
     
     if approach == 'mb_cmaes':
       agent.launchApproach_MB_CMAES()
+    elif approach == 'mb_msgd':
+      agent.launchApproach_MB_MSGD()
+    else:
+      print('ERROR: invalid approach')
+      quit()
 
 
