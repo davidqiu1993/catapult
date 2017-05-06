@@ -72,6 +72,10 @@ class TCatapultLPLinearSimNN(object):
     self._CONFIG_GD_VERBOSE = False
     self._CONFIG_MSGD_STSIZE = 20
     self._CONFIG_MSGD_VERBOSE = False
+    self._CONFIG_MSGD_NN_VERBOSE = False
+    
+    self._CONFIG_HYBRID_POLICY_EXP_SAMPLES_N = 12
+    self._CONFIG_HYBRID_POLICY_NEW_SAMPLES_N = 4
     
     self._CONFIG_EVALUATION_PLOT_DENSITY = 100
     
@@ -439,7 +443,7 @@ class TCatapultLPLinearSimNN(object):
     """
     sample = desired_loc_land
     """
-    prefix_info = 'catapult/generate_test_samples:'
+    prefix_info = 'catapult/generateTestSamples:'
     
     samples_desired_loc_land = self._ESTIMATED_LOC_LAND_MIN + (self._ESTIMATED_LOC_LAND_MAX - self._ESTIMATED_LOC_LAND_MIN) * np.random.sample(self._BENCHMARK_EPISODES)
     logger.log('{} samples generated (samples: {})'.format(prefix_info, len(samples_desired_loc_land)))
@@ -450,7 +454,7 @@ class TCatapultLPLinearSimNN(object):
     """
     sample = (pos_target, loc_land)
     """
-    prefix_info = 'catapult/collect_initial_samples:'
+    prefix_info = 'catapult/collectInitialSamples:'
     
     samples = []
     for i in range(self._BENCHMARK_INIT_SAMPLES_N):
@@ -600,6 +604,56 @@ class TCatapultLPLinearSimNN(object):
     
     return best_pos_target, self._launchModule_solveForAction_MB_MSGD_iteration
   
+  def _launchModule_solveForAction_Hybrid_MSGD_NN(self, desired_loc_land, model_dynamics, model_policy, options={}):
+    """
+    Hybrid action optimizer with multistart gradient descent and gradient 
+    descent starting from initial guess suggested by policy network.
+    """
+    prefix_info = 'catapult/solveForAction_Hybrid_MSGD_NN:'
+    
+    self._launchModule_solveForAction_Hybrid_MSGD_NN_iteration = 0
+    
+    # Predict initial guess by policy network
+    prediction = model_policy.Predict([desired_loc_land], with_var=True)
+    pos_target_h   = (prediction.Y.ravel())[0]
+    pos_target_err = (np.sqrt(np.diag(prediction.Var)))[0]
+    
+    # Optimize action by gradient descent from initial guess
+    options = {
+      'init_pos_target': pos_target_h
+    }
+    self._launchModule_solveForAction_MB_GD(desired_loc_land, model_dynamics, options)
+    
+    self._launchModule_solveForAction_MB_MSGD(X_train_policy[i], model_dynamics)
+    
+    
+    #TODO
+  
+  def _launchModule_generateNNPolicyTrainingSamples_MSGD(self, Y_train_dynamics, model_dynamics, model_policy):
+    """
+    Generate policy network training samples from dynamics model considering 
+    past experiences by multistart gradient descent optimizer.
+    """
+    prefix_info = 'catapult/generateNNPolicySamples_MSGD:'
+    
+    X_train_policy = []
+    Y_train_policy = []
+    
+    exp_samples_n = min(self._CONFIG_HYBRID_POLICY_EXP_SAMPLES_N, len(Y_train_dynamics))
+    new_samples_n = (self._CONFIG_HYBRID_POLICY_NEW_SAMPLES_N + self._CONFIG_HYBRID_POLICY_EXP_SAMPLES_N) - exp_samples_n
+    
+    X_train_policy = X_train_policy + random.sample(Y_train_dynamics, exp_samples_n)
+    for i in range(new_samples_n):
+      x = float(self._ESTIMATED_LOC_LAND_MIN + (self._ESTIMATED_LOC_LAND_MAX - self._ESTIMATED_LOC_LAND_MIN) * np.random.sample())
+      X_train_policy.append(x)
+    
+    total_iterations = 0
+    for i in range(len(X_train_policy)):
+      #TODO
+      
+      
+    
+  
   def launchApproach_MB_CMAES(self):
     """
     Model-based, CMA-ES(action)
@@ -614,6 +668,10 @@ class TCatapultLPLinearSimNN(object):
     logger.log('{} collect initial random samples'.format(prefix_info))
     model_dynamics = self._createNNDynamics()
     samples_dynamics = self._launchModule_collectInitialDynamicsSamples()
+    for sample in samples_dynamics:
+      pos_target, loc_land = sample
+      X_train_dynamics.append(pos_target)
+      Y_train_dynamics.append(loc_land)
     logger.log('{} train dynamics model with initial random samples'.format(prefix_info))
     self._trainNNDynamics(model_dynamics, samples_dynamics)
     
@@ -676,6 +734,10 @@ class TCatapultLPLinearSimNN(object):
     logger.log('{} collect initial random samples'.format(prefix_info))
     model_dynamics = self._createNNDynamics()
     samples_dynamics = self._launchModule_collectInitialDynamicsSamples()
+    for sample in samples_dynamics:
+      pos_target, loc_land = sample
+      X_train_dynamics.append(pos_target)
+      Y_train_dynamics.append(loc_land)
     logger.log('{} train dynamics model with initial random samples'.format(prefix_info))
     self._trainNNDynamics(model_dynamics, samples_dynamics)
     
@@ -724,6 +786,85 @@ class TCatapultLPLinearSimNN(object):
     self._evaluateNNDynamics(model_dynamics, X_train_dynamics, Y_train_dynamics)
     self._evaluateTrialResults(trialResults)
 
+  def launchApproach_Hybrid_MSGD_NN(self):
+    """
+    Hybrid, MSGD-MB, NN-MF
+    - {(d*, Multistart-GD(action -> d))} -> NNPolicy,
+    - action <- GD(NNPolicy(d*) -> d) + Multistart-GD(action -> d)
+    """
+    prefix_info = 'catapult/Hybrid_MSGD_NN:'
+    
+    X_train_dynamics = []
+    Y_train_dynamics = []
+    X_train_policy = []
+    Y_train_policy = []
+    trialResults = []
+    
+    # Train dynamics model with initial random samples
+    logger.log('{} collect initial random samples'.format(prefix_info))
+    model_dynamics = self._createNNDynamics()
+    samples_dynamics = self._launchModule_collectInitialDynamicsSamples()
+    for sample in samples_dynamics:
+      pos_target, loc_land = sample
+      X_train_dynamics.append(pos_target)
+      Y_train_dynamics.append(loc_land)
+    logger.log('{} train dynamics model with initial random samples'.format(prefix_info))
+    self._trainNNDynamics(model_dynamics, samples_dynamics)
+    
+    # Create policy network
+    model_policy = self._createNNPolicy()
+    
+    # For each episode
+    logger.log('{} generate test samples'.format(prefix_info))
+    samples_desired_loc_land = self._launchModule_generateTestSamples()
+    for episode in range(len(samples_desired_loc_land)):
+      desired_loc_land = samples_desired_loc_land[episode]
+      logger.log('{} episodic test (episode: {}, desired_loc_land: {})'.format(prefix_info, episode+1, desired_loc_land))
+      
+      # Collect policy network training samples
+      X_train_policy = []
+      Y_train_policy = []
+      exp_samples_n = min(self._CONFIG_HYBRID_POLICY_EXP_SAMPLES_N, )
+      #TODO
+      
+      
+      # Optimize action by multistart gradient descent
+      optimal_pos_target, n_iter = self._launchModule_solveForAction_MB_MSGD(desired_loc_land, model_dynamics)
+      logger.log('{} optimize action by multistart gradient descent (desired_loc_land: {}, optimal_pos_target: {}, n_iter: {})'.format(
+        prefix_info, desired_loc_land, optimal_pos_target, n_iter))
+      
+      # Test in true dynamics
+      pos_target = optimal_pos_target
+      loc_land = self.catapult.throw_linear(optimal_pos_target)
+      logger.log('{} test in true dynamics (desired_loc_land: {}, loc_land: {}, pos_target: {})'.format(prefix_info, desired_loc_land, loc_land, pos_target))
+      
+      # Train dynamics model
+      X_train_dynamics.append(pos_target)
+      Y_train_dynamics.append(loc_land)
+      samples = [(pos_target, loc_land)]
+      logger.log('{} train dynamics model (samples: {})'.format(prefix_info, samples))
+      self._trainNNDynamics(model_dynamics, samples)
+      
+      # Add trial result entry
+      entry = {
+        'approach':           str('Hybrid, MSGD-MB, NN-MF'),
+        'desired_loc_land':   float(desired_loc_land),
+        'pos_target':         float(pos_target),
+        'loc_land':           float(loc_land),
+        'preopt_samples':     int(self._BENCHMARK_INIT_SAMPLES_N),
+        'preopt_simulations': int(0),
+        'samples':            int(episode),
+        'simulations':        int(n_iter)
+      }
+      trialResults.append(entry)
+      logger.log('{} add trial result entry >>>'.format(prefix_info))
+      logger.log(entry)
+      
+      logger.log('')
+    
+    # Evaluate
+    self._evaluateNNDynamics(model_dynamics, X_train_dynamics, Y_train_dynamics)
+    self._evaluateTrialResults(trialResults)
 
 
 if __name__ == '__main__':
