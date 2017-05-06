@@ -71,7 +71,7 @@ class TCatapultLPLinearSimNN(object):
     self._CONFIG_CMAES_VERBOSE = False
     self._CONFIG_GD_VERBOSE = False
     self._CONFIG_MSGD_STSIZE = 20
-    self._CONFIG_MSGD_VERBOSE = True
+    self._CONFIG_MSGD_VERBOSE = False
     
     self._CONFIG_EVALUATION_PLOT_DENSITY = 100
     
