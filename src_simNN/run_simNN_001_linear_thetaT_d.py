@@ -72,7 +72,10 @@ class TCatapultLPLinearSimNN(object):
     self._CONFIG_GD_VERBOSE = False
     self._CONFIG_MSGD_STSIZE = 20
     self._CONFIG_MSGD_VERBOSE = False
+    self._CONFIG_NNPOLICYGD_VERBOSE = False
     self._CONFIG_MSGD_NN_VERBOSE = False
+    
+    self._CONFIG_GENERATE_NNPOLICY_SAMPLES_VERBOSE = True
     
     self._CONFIG_HYBRID_POLICY_EXP_SAMPLES_N = 12
     self._CONFIG_HYBRID_POLICY_NEW_SAMPLES_N = 4
@@ -195,7 +198,7 @@ class TCatapultLPLinearSimNN(object):
       X_train_policy.append([loc_land])
       Y_train_policy.append([pos_target])
     
-    model_policy.updateBatch(X_train_policy, Y_train_policy, not_learn=not_learn)
+    model_policy.UpdateBatch(X_train_policy, Y_train_policy, not_learn=not_learn)
   
   def _trainMultilinearPolicyForApproximator(self, mtl_policy, approximatorIndex, samples, flush=False):
     """
@@ -515,13 +518,18 @@ class TCatapultLPLinearSimNN(object):
     """
     Gradient Descent
     options['init_pos_target']: initial guess of pos_target
+    options['algorithm']: optimization algorithm for gradient descent
+    - 'nms': Nelder-Mead simplex
+    - 'dls': direction with line search
     """
     prefix_info = 'catapult/solveForAction_MB_GD:'
     
     option_init_pos_target = options.get('init_pos_target', self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) / 2)
+    option_algorithm       = options.get('algorithm', 'nms')
+    
+    tolx = 0.0001
     
     init_guess = np.array([option_init_pos_target])
-    tolx       = 0.0001
     self._launchModule_solveForAction_MB_GD_iteration = 0
     
     def f_loss(x):
@@ -533,39 +541,47 @@ class TCatapultLPLinearSimNN(object):
       loss = 0.5 * (desired_loc_land - loc_land_h)**2
       return loss
     
-    def f_loss_grad(x):
-      pos_target = x[0]
-      self._launchModule_solveForAction_MB_GD_iteration += 1
-      prediction = model_dynamics.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
-      loc_land_h    = float((prediction.Y.ravel())[0])
-      loc_land_err  = float((np.sqrt(np.diag(prediction.Var)))[0])
-      loc_land_grad = float(prediction.Grad.ravel()[0])
-      loss_grad = loc_land_grad * (loc_land_h - desired_loc_land)
-      return np.array([loss_grad])
+    if option_algorithm == 'nms':
+      res = sp_optimize.fmin(f_loss, init_guess, xtol=tolx, disp=0)
+      optimal_pos_target = self._fixRange(res[0], self._POS_TARGET_MIN, self._POS_TARGET_MAX)
     
-    x = init_guess
-    x_prev = x + tolx + 1
+    elif option_algorithm == 'dls':
+      def f_loss_grad(x):
+        pos_target = x[0]
+        self._launchModule_solveForAction_MB_GD_iteration += 1
+        prediction = model_dynamics.Predict([pos_target], x_var=0.0**2, with_var=True, with_grad=True)
+        loc_land_h    = float((prediction.Y.ravel())[0])
+        loc_land_err  = float((np.sqrt(np.diag(prediction.Var)))[0])
+        loc_land_grad = float(prediction.Grad.ravel()[0])
+        loss_grad = loc_land_grad * (loc_land_h - desired_loc_land)
+        return np.array([loss_grad])
+      
+      x = init_guess
+      x_prev = x + tolx + 1
+      
+      iteration = 0
+      has_diverge = False
+      while np.linalg.norm(x - x_prev) >= tolx and not has_diverge:
+        iteration += 1
+        direction = - f_loss_grad(x)
+        res = sp_optimize.line_search(f_loss, f_loss_grad, x, direction)
+        if res[0] is None:
+          has_diverge = True
+          alpha = 1.0
+          while not ((x + alpha * direction) < self._POS_TARGET_MIN or (x + alpha * direction) > self._POS_TARGET_MAX):
+            alpha = alpha * 2
+        else:
+          has_diverge = False
+          alpha = res[0]
+        x_prev = x
+        x = x_prev + alpha * direction
+        if self._CONFIG_GD_VERBOSE:
+          logger.log('{} iter = {} ({}), alpha = {}, direction = {}, x_next = {}'.format(prefix_info, iteration, self._launchModule_solveForAction_MB_GD_iteration, alpha, direction, x))
+      
+      optimal_pos_target = self._fixRange(x[0], self._POS_TARGET_MIN, self._POS_TARGET_MAX)
     
-    iteration = 0
-    has_diverge = False
-    while np.linalg.norm(x - x_prev) >= tolx and not has_diverge:
-      iteration += 1
-      direction = - f_loss_grad(x)
-      res = sp_optimize.line_search(f_loss, f_loss_grad, x, direction)
-      if res[0] is None:
-        has_diverge = True
-        alpha = 1.0
-        while not ((x + alpha * direction) < self._POS_TARGET_MIN or (x + alpha * direction) > self._POS_TARGET_MAX):
-          alpha = alpha * 2
-      else:
-        has_diverge = False
-        alpha = res[0]
-      x_prev = x
-      x = x_prev + alpha * direction
-      if self._CONFIG_GD_VERBOSE:
-        logger.log('{} iter = {} ({}), alpha = {}, direction = {}, x_next = {}'.format(prefix_info, iteration, self._launchModule_solveForAction_MB_GD_iteration, alpha, direction, x))
-    
-    optimal_pos_target = self._fixRange(x[0], self._POS_TARGET_MIN, self._POS_TARGET_MAX)
+    else:
+      assert(False)
     
     return optimal_pos_target, self._launchModule_solveForAction_MB_GD_iteration
   
@@ -604,14 +620,14 @@ class TCatapultLPLinearSimNN(object):
     
     return best_pos_target, self._launchModule_solveForAction_MB_MSGD_iteration
   
-  def _launchModule_solveForAction_Hybrid_MSGD_NN(self, desired_loc_land, model_dynamics, model_policy, options={}):
+  def _launchModule_solveForAction_Hybrid_NNPolicyGD(self, desired_loc_land, model_dynamics, model_policy, options={}):
     """
-    Hybrid action optimizer with multistart gradient descent and gradient 
-    descent starting from initial guess suggested by policy network.
+    Hybrid action optimizer with gradient descent starting from initial guess 
+    suggested by policy network.
     """
-    prefix_info = 'catapult/solveForAction_Hybrid_MSGD_NN:'
+    prefix_info = 'catapult/solveForAction_Hybrid_NNPolicyGD:'
     
-    self._launchModule_solveForAction_Hybrid_MSGD_NN_iteration = 0
+    self._launchModule_solveForAction_Hybrid_NNPolicyGD_iteration = 0
     
     # Predict initial guess by policy network
     prediction = model_policy.Predict([desired_loc_land], with_var=True)
@@ -622,19 +638,56 @@ class TCatapultLPLinearSimNN(object):
     options = {
       'init_pos_target': pos_target_h
     }
-    self._launchModule_solveForAction_MB_GD(desired_loc_land, model_dynamics, options)
+    optimal_pos_target, n_iter = self._launchModule_solveForAction_MB_GD(desired_loc_land, model_dynamics, options)
+    self._launchModule_solveForAction_Hybrid_NNPolicyGD_iteration += n_iter
+    if self._CONFIG_NNPOLICYGD_VERBOSE:
+      logger.log('{} optimize action by gradient descent starting from initial guess suggested by policy network. (init_pos_target: {}, optimal_pos_target: {}, n_iter: {})'.format(
+        prefix_info, pos_target_h, optimal_pos_target, n_iter))
     
-    self._launchModule_solveForAction_MB_MSGD(X_train_policy[i], model_dynamics)
-    
-    
-    #TODO
+    return optimal_pos_target, self._launchModule_solveForAction_Hybrid_NNPolicyGD_iteration
   
-  def _launchModule_generateNNPolicyTrainingSamples_MSGD(self, Y_train_dynamics, model_dynamics, model_policy):
+  def _launchModule_solveForAction_Hybrid_MSGD_NN(self, desired_loc_land, model_dynamics, model_policy, options={}):
+    """
+    Hybrid action optimizer with multistart gradient descent and gradient 
+    descent starting from initial guess suggested by policy network.
+    """
+    prefix_info = 'catapult/solveForAction_Hybrid_MSGD_NN:'
+    
+    self._launchModule_solveForAction_Hybrid_MSGD_NN_iteration = 0
+    
+    # Optimize action by gradient descent starting from initial guess suggested by policy network
+    pos_target_candidate_policy_gd, n_iter = self._launchModule_solveForAction_Hybrid_NNPolicyGD(desired_loc_land, model_dynamics, model_policy)
+    self._launchModule_solveForAction_Hybrid_MSGD_NN_iteration += n_iter
+    prediction = model_dynamics.Predict([pos_target_candidate_policy_gd], with_var=True)
+    loc_land_h_policy_gd   = (prediction.Y.ravel())[0]
+    loc_land_err_policy_gd = (np.sqrt(np.diag(prediction.Var)))[0]
+    if self._CONFIG_MSGD_NN_VERBOSE:
+      logger.log('{} optimize action by gradient descent starting from initial guess suggested by policy network. (pos_target: {}, loc_land_h: {}, loc_land_err: {}, n_iter: {}/{})'.format(
+        prefix_info, pos_target_candidate_policy_gd, loc_land_h_policy_gd, loc_land_err_policy_gd, n_iter, self._launchModule_solveForAction_Hybrid_MSGD_NN_iteration))
+    
+    # Optimize action by multistart gradient descent
+    pos_target_candidate_msgd, n_iter = self._launchModule_solveForAction_MB_MSGD(desired_loc_land, model_dynamics)
+    self._launchModule_solveForAction_Hybrid_MSGD_NN_iteration += n_iter
+    prediction = model_dynamics.Predict([pos_target_candidate_msgd], with_var=True)
+    loc_land_h_msgd   = (prediction.Y.ravel())[0]
+    loc_land_err_msgd = (np.sqrt(np.diag(prediction.Var)))[0]
+    if self._CONFIG_MSGD_NN_VERBOSE:
+      logger.log('{} optimize action by multistart gradient descent. (pos_target: {}, loc_land_h: {}, loc_land_err: {}, n_iter: {}/{})'.format(
+        prefix_info, pos_target_candidate_msgd, loc_land_h_msgd, loc_land_err_msgd, n_iter, self._launchModule_solveForAction_Hybrid_MSGD_NN_iteration))
+    
+    # Evaluate action candidates
+    best_pos_target = pos_target_candidate_policy_gd
+    if abs(desired_loc_land - loc_land_h_msgd) < abs(desired_loc_land - loc_land_h_policy_gd):
+      best_pos_target = pos_target_candidate_msgd
+    
+    return best_pos_target, self._launchModule_solveForAction_Hybrid_MSGD_NN_iteration
+  
+  def _launchModule_generateNNPolicyTrainingSamples(self, Y_train_dynamics, model_dynamics, model_policy):
     """
     Generate policy network training samples from dynamics model considering 
-    past experiences by multistart gradient descent optimizer.
+    past experiences.
     """
-    prefix_info = 'catapult/generateNNPolicySamples_MSGD:'
+    prefix_info = 'catapult/generateNNPolicySamples:'
     
     X_train_policy = []
     Y_train_policy = []
@@ -649,10 +702,19 @@ class TCatapultLPLinearSimNN(object):
     
     total_iterations = 0
     for i in range(len(X_train_policy)):
-      #TODO
-      
-      
+      desired_loc_land = X_train_policy[i]
+      optimal_pos_target, n_iter = self._launchModule_solveForAction_Hybrid_NNPolicyGD(desired_loc_land, model_dynamics, model_policy)
+      total_iterations += n_iter
+      Y_train_policy.append(optimal_pos_target)
+      if self._CONFIG_GENERATE_NNPOLICY_SAMPLES_VERBOSE:
+        logger.log('{} generate policy network training sample (sample: {}/{}, desired_loc_land: {}, optimal_pos_target: {}, n_iter: {}/{})'.format(
+          prefix_info, i+1, len(X_train_policy), desired_loc_land, optimal_pos_target, n_iter, total_iterations))
     
+    samples = []
+    for i in range(len(X_train_policy)):
+      samples.append((X_train_policy[i], Y_train_policy[i]))
+    
+    return samples, total_iterations
   
   def launchApproach_MB_CMAES(self):
     """
@@ -821,16 +883,29 @@ class TCatapultLPLinearSimNN(object):
       desired_loc_land = samples_desired_loc_land[episode]
       logger.log('{} episodic test (episode: {}, desired_loc_land: {})'.format(prefix_info, episode+1, desired_loc_land))
       
-      # Collect policy network training samples
+      result_preopt_simulations = 0
+      result_simulations = 0
+      
+      # Generate policy network training samples
       X_train_policy = []
       Y_train_policy = []
-      exp_samples_n = min(self._CONFIG_HYBRID_POLICY_EXP_SAMPLES_N, )
-      #TODO
+      samples, n_iter = self._launchModule_generateNNPolicyTrainingSamples(Y_train_dynamics, model_dynamics, model_policy)
+      for sample in samples:
+        x, y = sample
+        X_train_policy.append(x)
+        Y_train_policy.append(y)
+      result_preopt_simulations += n_iter
+      logger.log('{} generated policy network training samples with model-based optimization (samples: {}, n_iter: {})'.format(
+        prefix_info, len(samples), n_iter))
       
+      # Train policy network with generate training samples
+      logger.log('{} train policy network with generate training samples'.format(prefix_info))
+      self._trainNNPolicy(model_policy, samples, flush=True)
       
-      # Optimize action by multistart gradient descent
-      optimal_pos_target, n_iter = self._launchModule_solveForAction_MB_MSGD(desired_loc_land, model_dynamics)
-      logger.log('{} optimize action by multistart gradient descent (desired_loc_land: {}, optimal_pos_target: {}, n_iter: {})'.format(
+      # Optimize action by hybrid NNPolicy and MSGD
+      optimal_pos_target, n_iter = self._launchModule_solveForAction_Hybrid_MSGD_NN(desired_loc_land, model_dynamics, model_policy)
+      result_simulations += n_iter
+      logger.log('{} optimize action by hybrid NNPolicy and MSGD (desired_loc_land: {}, optimal_pos_target: {}, n_iter: {})'.format(
         prefix_info, desired_loc_land, optimal_pos_target, n_iter))
       
       # Test in true dynamics
@@ -852,9 +927,9 @@ class TCatapultLPLinearSimNN(object):
         'pos_target':         float(pos_target),
         'loc_land':           float(loc_land),
         'preopt_samples':     int(self._BENCHMARK_INIT_SAMPLES_N),
-        'preopt_simulations': int(0),
+        'preopt_simulations': int(result_preopt_simulations),
         'samples':            int(episode),
-        'simulations':        int(n_iter)
+        'simulations':        int(result_simulations)
       }
       trialResults.append(entry)
       logger.log('{} add trial result entry >>>'.format(prefix_info))
@@ -864,7 +939,9 @@ class TCatapultLPLinearSimNN(object):
     
     # Evaluate
     self._evaluateNNDynamics(model_dynamics, X_train_dynamics, Y_train_dynamics)
+    self._evaluateNNPolicy(model_dynamics, model_policy, X_train_policy, Y_train_policy)
     self._evaluateTrialResults(trialResults)
+
 
 
 if __name__ == '__main__':
@@ -889,6 +966,8 @@ if __name__ == '__main__':
       agent.launchApproach_MB_CMAES()
     elif approach == 'mb_msgd':
       agent.launchApproach_MB_MSGD()
+    elif approach == 'hybrid_msgd_nn':
+      agent.launchApproach_Hybrid_MSGD_NN()
     else:
       print('ERROR: invalid approach')
       quit()
