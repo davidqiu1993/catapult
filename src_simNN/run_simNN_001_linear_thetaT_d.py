@@ -78,6 +78,7 @@ class TCatapultLPLinearSimNN(object):
     self._CONFIG_NNPOLICYGD_VERBOSE = False
     self._CONFIG_MSGD_NN_VERBOSE = False
     self._CONFIG_MTLPOLICYGD_VERBOSE = False
+    self._CONFIG_MTL_NN_VERBOSE = False
     
     self._CONFIG_GENERATE_NNPOLICY_SAMPLES_VERBOSE = False
     
@@ -166,9 +167,20 @@ class TCatapultLPLinearSimNN(object):
     
     return model_policy
   
-  def _createMTLPolicy(self):
+  def _createMTLPolicy(self, model_dynamics):
+    prefix_info = 'catapult/createMTLPolicy:'
+    
     mtl_policy = TMultilinearApproximators(dim_input=1, n_approximators=self._CONFIG_MTL_APPROXIMATORS_N)
-    return mtl_policy
+    mtl_policy_inactive = []
+    
+    for approximatorIndex in range(len(mtl_policy)):
+      pos_target_sample = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
+      self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_sample)
+      mtl_policy_inactive.append(int(0.5 * len(mtl_policy)))
+      logger.log('{} train multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
+        prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_sample))
+    
+    return mtl_policy, mtl_policy_inactive
   
   def _trainNNDynamics(self, model_dynamics, samples, flush=False, not_learn=False):
     """
@@ -754,6 +766,41 @@ class TCatapultLPLinearSimNN(object):
       
     return best_pos_target, best_candidate, self._launchModule_solveForAction_Hybrid_MTLPolicyGD_iteration
   
+  def _launchModule_solveForAction_Hybrid_MTL_NN(self, desired_loc_land, model_dynamics, mtl_policy, model_policy, options={}):
+    """
+    Hybrid action optimizer with MTLPolicy and NNPolicy gradient descent.
+    """
+    prefix_info = 'catapult/solveForAction_Hybrid_MTL_NN:'
+    
+    self._launchModule_solveForAction_Hybrid_MTL_NN_iteration = 0
+    
+    # Optimize action by NNPolicy gradient descent
+    pos_target_candidate_policy_gd, n_iter = self._launchModule_solveForAction_Hybrid_NNPolicyGD(desired_loc_land, model_dynamics, model_policy)
+    self._launchModule_solveForAction_Hybrid_MTL_NN_iteration += n_iter
+    prediction = model_dynamics.Predict([pos_target_candidate_policy_gd], with_var=True)
+    loc_land_h_policy_gd   = (prediction.Y.ravel())[0]
+    loc_land_err_policy_gd = (np.sqrt(np.diag(prediction.Var)))[0]
+    if self._CONFIG_MTL_NN_VERBOSE:
+      logger.log('{} optimize action by NNPolicy gradient descent (pos_target: {}, loc_land_h: {}, loc_land_err: {}, n_iter: {}/{})'.format(
+        prefix_info, pos_target_candidate_policy_gd, loc_land_h_policy_gd, loc_land_err_policy_gd, n_iter, self._launchModule_solveForAction_Hybrid_MTL_NN_iteration))
+    
+    # Optimize action by MTLPolicy gradient descent
+    pos_target_candidate_mtl, best_candidate_mtl, n_iter = self._launchModule_solveForAction_Hybrid_MTLPolicyGD(desired_loc_land, model_dynamics, mtl_policy)
+    self._launchModule_solveForAction_Hybrid_MTL_NN_iteration += n_iter
+    prediction = model_dynamics.Predict([pos_target_candidate_mtl], with_var=True)
+    loc_land_h_mtl   = (prediction.Y.ravel())[0]
+    loc_land_err_mtl = (np.sqrt(np.diag(prediction.Var)))[0]
+    if self._CONFIG_MTL_NN_VERBOSE:
+      logger.log('{} optimize action by MTLPolicy gradient descent. (pos_target: {}, loc_land_h: {}, loc_land_err: {}, n_iter: {}/{})'.format(
+        prefix_info, pos_target_candidate_mtl, loc_land_h_mtl, loc_land_err_mtl, n_iter, self._launchModule_solveForAction_Hybrid_MTL_NN_iteration))
+    
+    # Evaluate action candidates
+    best_pos_target = pos_target_candidate_policy_gd
+    if abs(desired_loc_land - loc_land_h_mtl) < abs(desired_loc_land - loc_land_h_policy_gd):
+      best_pos_target = pos_target_candidate_mtl
+    
+    return best_pos_target, best_candidate_mtl, self._launchModule_solveForAction_Hybrid_MTL_NN_iteration
+  
   def _launchModule_generateNNPolicyTrainingSamples(self, Y_train_dynamics, model_dynamics, model_policy):
     """
     Generate policy network training samples from dynamics model considering 
@@ -787,6 +834,24 @@ class TCatapultLPLinearSimNN(object):
       samples.append((X_train_policy[i], Y_train_policy[i]))
     
     return samples, total_iterations
+  
+  def _launchModule_reinitializeMTLPolicyApproximators(self, mtl_policy, mtl_policy_inactive, model_dynamics):
+    """
+    Reinitialize similar and inactive approximators in multilinear policy
+    """
+    # Reinitialize similar approximators
+    #TODO: how to find intersection subspace
+    
+    # Reinitialize inactive approximators
+    for approximatorIndex in range(len(mtl_policy)):
+      mtl_policy_inactive[approximatorIndex] += 1
+      
+      if mtl_policy_inactive[approximatorIndex] > len(mtl_policy):
+        pos_target_sample = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
+        self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_sample)
+        mtl_policy_inactive[approximatorIndex] = int(0.5 * len(mtl_policy))
+        logger.log('{} reinitialize multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
+          prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_sample))
   
   def launchApproach_MB_CMAES(self):
     """
@@ -1039,14 +1104,7 @@ class TCatapultLPLinearSimNN(object):
     self._trainNNDynamics(model_dynamics, samples_dynamics)
     
     # Train multilinear policy approximators with local samples
-    mtl_policy = self._createMTLPolicy()
-    mtl_policy_inactive = []
-    for approximatorIndex in range(len(mtl_policy)):
-      pos_target_sample = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
-      self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_sample)
-      mtl_policy_inactive.append(int(0.5 * len(mtl_policy)))
-      logger.log('{} train multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
-        prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_sample))
+    mtl_policy, mtl_policy_inactive = self._createMTLPolicy(model_dynamics)
     
     # For each episode
     logger.log('{} generate test samples'.format(prefix_info))
@@ -1069,19 +1127,8 @@ class TCatapultLPLinearSimNN(object):
       logger.log('{} update multilinear policy approximator with local samples (approximator: {}, mean: {})'.format(
         prefix_info, approximatorIndex, optimal_pos_target))
       
-      # Reinitialize similar approximators
-      #TODO: how to find intersection space
-      
-      # Reinitialize inactive approximators
-      for approximatorIndex in range(len(mtl_policy)):
-        mtl_policy_inactive[approximatorIndex] += 1
-        
-        if mtl_policy_inactive[approximatorIndex] > len(mtl_policy):
-          pos_target_sample = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
-          self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_sample)
-          mtl_policy_inactive[approximatorIndex] = int(0.5 * len(mtl_policy))
-          logger.log('{} reinitialize multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
-            prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_sample))
+      # Reinitialize similar and inactive approximators
+      self._launchModule_reinitializeMTLPolicyApproximators(mtl_policy, mtl_policy_inactive, model_dynamics)
       
       # Test in true dynamics
       pos_target = optimal_pos_target
@@ -1117,6 +1164,110 @@ class TCatapultLPLinearSimNN(object):
     self._evaluateMTLPolicy(model_dynamics, mtl_policy)
     self._evaluateTrialResults(trialResults)
 
+  def launchApproach_Hybrid_MTL_NN(self):
+    """
+    Hybrid, MTL-MF, NN-MF
+    """
+    prefix_info = 'catapult/Hybrid_MTL_NN:'
+    
+    X_train_dynamics = []
+    Y_train_dynamics = []
+    X_train_policyNN = []
+    Y_train_policyNN = []
+    trialResults = []
+    
+    # Train dynamics model with initial random samples
+    logger.log('{} collect initial random samples'.format(prefix_info))
+    model_dynamics = self._createNNDynamics()
+    samples_dynamics = self._launchModule_collectInitialDynamicsSamples()
+    for sample in samples_dynamics:
+      pos_target, loc_land = sample
+      X_train_dynamics.append(pos_target)
+      Y_train_dynamics.append(loc_land)
+    logger.log('{} train dynamics model with initial random samples'.format(prefix_info))
+    self._trainNNDynamics(model_dynamics, samples_dynamics)
+    
+    # Train multilinear policy approximators with local samples
+    mtl_policy, mtl_policy_inactive = self._createMTLPolicy(model_dynamics)
+    
+    # Create policy network
+    model_policy = self._createNNPolicy()
+    
+    # For each episode
+    logger.log('{} generate test samples'.format(prefix_info))
+    samples_desired_loc_land = self._launchModule_generateTestSamples()
+    for episode in range(len(samples_desired_loc_land)):
+      desired_loc_land = samples_desired_loc_land[episode]
+      logger.log('{} episodic test (episode: {}, desired_loc_land: {})'.format(prefix_info, episode+1, desired_loc_land))
+      
+      result_preopt_simulations = 0
+      result_simulations = 0
+      
+      # Generate policy network training samples
+      X_train_policyNN = []
+      Y_train_policyNN = []
+      samples, n_iter = self._launchModule_generateNNPolicyTrainingSamples(Y_train_dynamics, model_dynamics, model_policy)
+      for sample in samples:
+        x, y = sample
+        X_train_policyNN.append(x)
+        Y_train_policyNN.append(y)
+      result_preopt_simulations += n_iter
+      logger.log('{} generated policy network training samples with model-based optimization (samples: {}, n_iter: {})'.format(
+        prefix_info, len(samples), n_iter))
+      
+      # Train policy network with generate training samples
+      logger.log('{} train policy network with generate training samples'.format(prefix_info))
+      self._trainNNPolicy(model_policy, samples, flush=True)
+      
+      # Optimize action by hybrid NNPolicy and MTLPolicy gradient descent
+      optimal_pos_target, approximatorIndex, n_iter = self._launchModule_solveForAction_Hybrid_MTL_NN(desired_loc_land, model_dynamics, mtl_policy, model_policy)
+      mtl_policy_inactive[approximatorIndex] = 0
+      result_simulations += n_iter
+      logger.log('{} optimize action by hybrid NNPolicy and MTLPolicy gradient descent (desired_loc_land: {}, optimal_pos_target: {}, n_iter: {})'.format(
+        prefix_info, desired_loc_land, optimal_pos_target, n_iter))
+      
+      # Update multilinear policy approximator with local samples
+      self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, optimal_pos_target)
+      logger.log('{} update multilinear policy approximator with local samples (approximator: {}, mean: {})'.format(
+        prefix_info, approximatorIndex, optimal_pos_target))
+      
+      # Reinitialize similar and inactive approximators
+      self._launchModule_reinitializeMTLPolicyApproximators(mtl_policy, mtl_policy_inactive, model_dynamics)
+      
+      # Test in true dynamics
+      pos_target = optimal_pos_target
+      loc_land = self.catapult.throw_linear(pos_target)
+      logger.log('{} test in true dynamics (desired_loc_land: {}, loc_land: {}, pos_target: {})'.format(prefix_info, desired_loc_land, loc_land, pos_target))
+      
+      # Train dynamics model
+      X_train_dynamics.append(pos_target)
+      Y_train_dynamics.append(loc_land)
+      samples = [(pos_target, loc_land)]
+      logger.log('{} train dynamics model (samples: {})'.format(prefix_info, samples))
+      self._trainNNDynamics(model_dynamics, samples)
+      
+      # Add trial result entry
+      entry = {
+        'approach':           str('Hybrid, MTL-MF, NN-MF'),
+        'desired_loc_land':   float(desired_loc_land),
+        'pos_target':         float(pos_target),
+        'loc_land':           float(loc_land),
+        'preopt_samples':     int(self._BENCHMARK_INIT_SAMPLES_N),
+        'preopt_simulations': int(result_preopt_simulations),
+        'samples':            int(episode),
+        'simulations':        int(result_simulations)
+      }
+      trialResults.append(entry)
+      logger.log('{} add trial result entry >>>'.format(prefix_info))
+      logger.log(entry)
+      
+      logger.log('')
+    
+    # Evaluate
+    self._evaluateNNDynamics(model_dynamics, X_train_dynamics, Y_train_dynamics)
+    self._evaluateMTLPolicy(model_dynamics, mtl_policy)
+    self._evaluateNNPolicy(model_dynamics, model_policy, X_train_policyNN, Y_train_policyNN)
+    self._evaluateTrialResults(trialResults)
 
 
 if __name__ == '__main__':
@@ -1145,6 +1296,8 @@ if __name__ == '__main__':
       agent.launchApproach_Hybrid_MSGD_NN()
     elif approach == 'hybrid_mtl':
       agent.launchApproach_Hybrid_MTL()
+    elif approach == 'hybrid_mtl_nn':
+      agent.launchApproach_Hybrid_MTL_NN()
     else:
       print('ERROR: invalid approach')
       quit()
