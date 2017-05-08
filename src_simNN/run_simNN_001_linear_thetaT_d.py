@@ -69,7 +69,6 @@ class TCatapultLPLinearSimNN(object):
     self._CONFIG_MTL_LOCAL_SAMPLES_N = 20
     self._CONFIG_MTL_LOCAL_SAMPLES_VAR_RATIO = 0.05
     self._CONFIG_MTL_REINIT_THRESHOLD = 6.0 / 180.0 * math.pi # in rad
-    self._CONFIG_MTL_MAX_REINIT = 10
     
     self._CONFIG_CMAES_POPSIZE = 20
     self._CONFIG_CMAES_VERBOSE = False
@@ -1020,7 +1019,7 @@ class TCatapultLPLinearSimNN(object):
     Hybrid, MTL-MF
     - Initialize multilinear policy with Gaussian random samples in action space
     - Update the best fit approximator at each episode with local samples
-    - Remove close policy approximators and reinitialize
+    - Reinitialize similar or inactive policy approximators
     """
     prefix_info = 'catapult/Hybrid_MTL:'
     
@@ -1041,11 +1040,13 @@ class TCatapultLPLinearSimNN(object):
     
     # Train multilinear policy approximators with local samples
     mtl_policy = self._createMTLPolicy()
+    mtl_policy_inactive = []
     for approximatorIndex in range(len(mtl_policy)):
-      pos_target_h = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
-      self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_h)
+      pos_target_sample = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
+      self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_sample)
+      mtl_policy_inactive.append(int(0.5 * len(mtl_policy)))
       logger.log('{} train multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
-        prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_h))
+        prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_sample))
     
     # For each episode
     logger.log('{} generate test samples'.format(prefix_info))
@@ -1058,6 +1059,7 @@ class TCatapultLPLinearSimNN(object):
       
       # Optimize action by MTLPolicy gradient descent
       optimal_pos_target, approximatorIndex, n_iter = self._launchModule_solveForAction_Hybrid_MTLPolicyGD(desired_loc_land, model_dynamics, mtl_policy)
+      mtl_policy_inactive[approximatorIndex] = 0
       result_simulations += n_iter
       logger.log('{} optimize action by MTLPolicy gradient descent (desired_loc_land: {}, optimal_pos_target: {}, approximator: {}, n_iter: {})'.format(
         prefix_info, desired_loc_land, optimal_pos_target, approximatorIndex, n_iter))
@@ -1066,6 +1068,20 @@ class TCatapultLPLinearSimNN(object):
       self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, optimal_pos_target)
       logger.log('{} update multilinear policy approximator with local samples (approximator: {}, mean: {})'.format(
         prefix_info, approximatorIndex, optimal_pos_target))
+      
+      # Reinitialize similar approximators
+      #TODO: how to find intersection space
+      
+      # Reinitialize inactive approximators
+      for approximatorIndex in range(len(mtl_policy)):
+        mtl_policy_inactive[approximatorIndex] += 1
+        
+        if mtl_policy_inactive[approximatorIndex] > len(mtl_policy):
+          pos_target_sample = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
+          self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_sample)
+          mtl_policy_inactive[approximatorIndex] = int(0.5 * len(mtl_policy))
+          logger.log('{} reinitialize multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
+            prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_sample))
       
       # Test in true dynamics
       pos_target = optimal_pos_target
