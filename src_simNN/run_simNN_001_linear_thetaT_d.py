@@ -839,6 +839,8 @@ class TCatapultLPLinearSimNN(object):
     """
     Reinitialize similar and inactive approximators in multilinear policy
     """
+    prefix_info = 'catapult/reinitializeMTLPolicyApproximators:'
+    
     # Reinitialize similar approximators
     #TODO: how to find intersection subspace
     
