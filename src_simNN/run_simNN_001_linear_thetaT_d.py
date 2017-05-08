@@ -167,8 +167,8 @@ class TCatapultLPLinearSimNN(object):
     
     return model_policy
   
-  def _createMultilinearPolicy(self):
-    mtl_policy = TMultilinearApproximators(self._POS_TARGET_MIN, self._POS_TARGET_MAX, n_approximators=self._CONFIG_MTL_APPROXIMATORS_N)
+  def _createMTLPolicy(self):
+    mtl_policy = TMultilinearApproximators(dim_input=1, n_approximators=self._CONFIG_MTL_APPROXIMATORS_N)
     return mtl_policy
   
   def _trainNNDynamics(self, model_dynamics, samples, flush=False, not_learn=False):
@@ -205,30 +205,30 @@ class TCatapultLPLinearSimNN(object):
     
     model_policy.UpdateBatch(X_train_policy, Y_train_policy, not_learn=not_learn)
   
-  def _trainMultilinearPolicyForApproximator(self, mtl_policy, approximatorIndex, samples, flush=False):
+  def _trainMTLPolicyForApproximator(self, mtl_policy, approximatorIndex, samples, flush=False):
     """
     sample = (loc_land, pos_target)
     """
     if flush:
-      mtl_policy.flushForApproximator(approximatorIndex)
+      mtl_policy.flush(approximatorIndex)
     
     X_train_policy = []
     Y_train_policy = []
     for sample in samples:
       loc_land, pos_target = sample
-      X_train_policy.append(loc_land)
+      X_train_policy.append([loc_land])
       Y_train_policy.append(pos_target)
     
-    mtl_policy.updateForApproximator(approximatorIndex, X_train_policy, Y_train_policy)
+    mtl_policy.update(approximatorIndex, X_train_policy, Y_train_policy)
   
-  def _trainMultilinearPolicy(self, mtl_policy, samples_list, flush=False):
+  def _trainMTLPolicy(self, mtl_policy, samples_list, flush=False):
     """
     sample = (loc_land, pos_target)
     """
     for approximatorIndex in range(len(samples_list)):
-      self._trainMultilinearPolicyForApproximator(mtl_policy, approximatorIndex, samples, flush=flush)
+      self._trainMTLPolicyForApproximator(mtl_policy, approximatorIndex, samples, flush=flush)
   
-  def _updateLocalMultilinearPolicyForApproximator(self, mtl_policy, approximatorIndex, model_dynamics, pos_target):
+  def _updateLocalMTLPolicyForApproximator(self, mtl_policy, approximatorIndex, model_dynamics, pos_target):
     samples = []
     
     for i in range(self._CONFIG_MTL_LOCAL_SAMPLES_N):
@@ -243,7 +243,7 @@ class TCatapultLPLinearSimNN(object):
       
       samples.append((x, y))
     
-    self._trainMultilinearPolicyForApproximator(mtl_policy, approximatorIndex, samples, flush=True)
+    self._trainMTLPolicyForApproximator(mtl_policy, approximatorIndex, samples, flush=True)
   
   def _savetrial(self, trialResults):
     filepath_trialResults = os.path.abspath(os.path.join(self._dirpath_log, 'trial_' + self._timestamp + '.yaml'))
@@ -460,8 +460,9 @@ class TCatapultLPLinearSimNN(object):
     plt.plot(Y_plot_dynamics, X_plot_dynamics, 'r-')
     
     # Plot policy approximators
-    X_plot_policy = [self._ESTIMATED_LOC_LAND_MIN, self._ESTIMATED_LOC_LAND_MAX]
-    Y_plot_policy_list = mtl_policy.predict(X_plot_policy)
+    X_plot_policy = [[self._ESTIMATED_LOC_LAND_MIN], [self._ESTIMATED_LOC_LAND_MAX]]
+    y_plot_policy_list_list = [mtl_policy.predictAll(X_plot_policy[i]) for i in range(len(X_plot_policy))]
+    Y_plot_policy_list = [[y_plot_policy_list_list[i][j] for i in range(len(X_plot_policy))] for j in range(len(mtl_policy))]
     for approximatorIndex in range(len(Y_plot_policy_list)):
       plt.plot(X_plot_policy, Y_plot_policy_list[approximatorIndex], 'y-')
     
@@ -720,7 +721,7 @@ class TCatapultLPLinearSimNN(object):
     self._launchModule_solveForAction_Hybrid_MTLPolicyGD_iteration = 0
     
     # Predict initial guesses by multilinear policy approximators
-    pos_target_h_candidates = mtl_policy.predict(desired_loc_land)
+    pos_target_h_candidates = mtl_policy.predictAll([desired_loc_land])
     pos_target_h_candidates = [self._fixRange(pos_target_h_candidates[i], self._POS_TARGET_MIN, self._POS_TARGET_MAX) for i in range(len(pos_target_h_candidates))]
     
     # For each candidate
@@ -1039,12 +1040,12 @@ class TCatapultLPLinearSimNN(object):
     self._trainNNDynamics(model_dynamics, samples_dynamics)
     
     # Train multilinear policy approximators with local samples
-    mtl_policy = self._createMultilinearPolicy()
-    for approximatorIndex in range(mtl_policy.countApproximators()):
-      pos_target_h = mtl_policy.predictByApproximator(approximatorIndex, 0)
-      self._updateLocalMultilinearPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_h)
+    mtl_policy = self._createMTLPolicy()
+    for approximatorIndex in range(len(mtl_policy)):
+      pos_target_h = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
+      self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_h)
       logger.log('{} train multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
-        prefix_info, approximatorIndex+1, mtl_policy.countApproximators(), pos_target_h))
+        prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_h))
     
     # For each episode
     logger.log('{} generate test samples'.format(prefix_info))
@@ -1062,7 +1063,7 @@ class TCatapultLPLinearSimNN(object):
         prefix_info, desired_loc_land, optimal_pos_target, approximatorIndex, n_iter))
       
       # Update multilinear policy approximator with local samples
-      self._updateLocalMultilinearPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, optimal_pos_target)
+      self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, optimal_pos_target)
       logger.log('{} update multilinear policy approximator with local samples (approximator: {}, mean: {})'.format(
         prefix_info, approximatorIndex, optimal_pos_target))
       
