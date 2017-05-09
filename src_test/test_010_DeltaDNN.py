@@ -286,17 +286,17 @@ if __name__ == '__main__':
                         plot=True)
   
   if True:
-    ave_stderr_y, ave_stderr_err = tester.test_same_dim('step', [[-3.0, 5.0]], noise=[0.2], max_updates=10000)
-    print('ave_stderr_y ='.format(ave_stderr_y))
-    print('ave_stderr_err ='.format(ave_stderr_err))
+    ave_stderr_y, ave_stderr_err = tester.test_same_dim('step', [[-3.0, 5.0]], noise=[0.2], max_updates=1000)
+    print('ave_stderr_y = {}'.format(ave_stderr_y))
+    print('ave_stderr_err = {}'.format(ave_stderr_err))
   
   if False:
     result = tester.test_structures([[-5.0, 5.0]], fp_result='david_dnn_result_2_tmp.yaml')
     
     for result_i in result:
       print(result_i['feature_comb'])
-      print('ave_stderr_y ='.format(result_i['ave_stderr_y']))
-      print('ave_stderr_err ='.format(result_i['ave_stderr_err']))
+      print('ave_stderr_y = {}'.format(result_i['ave_stderr_y']))
+      print('ave_stderr_err = {}'.format(result_i['ave_stderr_err']))
     
     SaveYAML(result, 'david_dnn_result_2.yaml')
 

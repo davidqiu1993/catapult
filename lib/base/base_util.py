@@ -7,10 +7,12 @@ import os
 import sys
 import copy
 import threading
-import Queue  #For thread communication
+from queue import Queue  #For thread communication
 import time
 import random
 import traceback
+from builtins import int
+from six import iteritems
 
 #Speedup YAML using CLoader/CDumper
 from yaml import load as yamlload
@@ -18,7 +20,7 @@ from yaml import dump as yamldump
 try:
   from yaml import CLoader as YLoader, CDumper as YDumper
 except ImportError:
-  from yaml import YLoader, YDumper
+  from yaml import Loader as YLoader, Dumper as YDumper
 
 def AskYesNo():
   while 1:
@@ -340,7 +342,7 @@ def EstStrConvert(v_str):
   return v_str
 
 class Types:
-  stdprim= (int,long,float,bool,str)
+  stdprim= (int,float,bool,str)
   npbool= (np.bool_)
   npint= (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)
   npuint= (np.uint8, np.uint16, np.uint32, np.uint64)
@@ -361,8 +363,8 @@ def ToStdType(x, except_cnv=lambda y:y):
   except AttributeError:
     return except_cnv(x)
     #pass
-  print 'Failed to convert:',x
-  print 'Type:',type(x)
+  print('Failed to convert:',x)
+  print('Type:',type(x))
   raise
 
 #Add a sub-dictionary with the key into a dictionary d
@@ -379,17 +381,17 @@ def PrintDict(d,max_level=-1,level=0,keyonly=False,col=None,c1='',c2=''):
   if col is not None:  c1,c2= ACol.X2(col)
   for k,v in d.iteritems():
     if type(v)==dict:
-      print '%s%s[%s]%s= ...' % ('  '*level, c1, str(k), c2)
+      print('%s%s[%s]%s= ...' % ('  '*level, c1, str(k), c2))
       if max_level<0 or level<max_level:
         PrintDict(v,max_level=max_level,level=level+1,keyonly=keyonly,col=None,c1=c1,c2=c2)
     elif keyonly:
-      print '%s%s[%s]%s= %s' % ('  '*level, c1, str(k), c2, type(v))
+      print('%s%s[%s]%s= %s' % ('  '*level, c1, str(k), c2, type(v)))
     else:
-      print '%s%s[%s]%s= %r' % ('  '*level, c1, str(k), c2, v)
+      print('%s%s[%s]%s= %r' % ('  '*level, c1, str(k), c2, v))
 
 #Insert a new dictionary to the base dictionary
 def InsertDict(d_base, d_new):
-  for k_new,v_new in d_new.iteritems():
+  for k_new,v_new in iteritems(d_new):
     if k_new in d_base and (type(v_new)==dict and type(d_base[k_new])==dict):
       InsertDict(d_base[k_new], v_new)
     else:
@@ -458,8 +460,8 @@ def InsertYAML(d_base, file_name):
 #Another simple print function to be used as an action
 def Print(*s):
   for ss in s:
-    print ss,
-  print ''
+    print(ss)
+  print('')
 
 #ASCII colors
 class ACol:
@@ -493,13 +495,13 @@ def CStr(col,*s):
 #Print with a color (col can be a code or an int)
 def CPrint(col,*s):
   if len(s)==0:
-    print ''
+    print('')
   else:
     c1,c2= ACol.X2(col)
-    print c1+str(s[0]),
+    print(c1+str(s[0]))
     for ss in s[1:]:
-      print ss,
-    print c2
+      print(ss)
+    print(c2)
 
 #Print an exception with a good format
 def PrintException(e, msg=''):
@@ -507,18 +509,18 @@ def PrintException(e, msg=''):
   c2= ACol.I(1)
   c3= ACol.I(0)
   ce= ACol.I()
-  print '%sException( %s%r %s)%s:' % (c1, c2,type(e), c1, msg)
-  print '%r' % (e)
-  #print '  type: ',type(e)
-  #print '  args: ',e.args
-  #print '  message: ',e.message
-  #print '  sys.exc_info(): ',sys.exc_info()
-  print '  %sTraceback: ' % (c3)
-  print '{'
+  print('%sException( %s%r %s)%s:' % (c1, c2,type(e), c1, msg))
+  print('%r' % (e))
+  #print('  type: ',type(e))
+  #print('  args: ',e.args)
+  #print('  message: ',e.message)
+  #print('  sys.exc_info(): ',sys.exc_info())
+  print('  %sTraceback: ' % (c3))
+  print('{')
   traceback.print_tb(sys.exc_info()[2])
-  print '}'
-  print '%s# Exception( %s%r %s)%s:' % (c1, c2,type(e), c1, msg)
-  print '# %r%s' % (e, ce)
+  print('}')
+  print('%s# Exception( %s%r %s)%s:' % (c1, c2,type(e), c1, msg))
+  print('# %r%s' % (e, ce))
 
 #Container class that can hold any variables
 #ref. http://blog.beanz-net.jp/happy_programming/2008/11/python-5.html
@@ -526,10 +528,10 @@ class TContainer:
   def __init__(self,debug=False):
     #self._debug= debug
     #if self._debug:
-    if debug:  print 'Created TContainer object',hex(id(self))
+    if debug:  print('Created TContainer object',hex(id(self)))
   def __del__(self):
     #if self._debug:
-    print 'Deleting TContainer object',hex(id(self))
+    print('Deleting TContainer object',hex(id(self)))
   def __str__(self):
     return str(self.__dict__)
   def __repr__(self):
@@ -651,9 +653,9 @@ class TThreadManager:
 
   def StopAll(self):
     for k in self.thread_list.keys():
-      print 'Stop thread %r...' % k,
+      print('Stop thread %r...' % k,)
       del self.thread_list[k]
-      print 'ok'
+      print('ok')
 
 
 '''TSignal class for a thread to send a message to several threads.

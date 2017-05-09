@@ -10,6 +10,10 @@ from chainer import cuda, Variable, FunctionSet, optimizers
 import chainer.functions  as F
 import six.moves.cPickle as pickle
 
+from builtins import range
+
+import pdb
+
 
 #Tools for NNs
 
@@ -34,7 +38,7 @@ def ReLUGauss(mu, var, epsilon=1.0e-6, cut_sd=4.0):
     if var_out>-epsilon:  return mu_out, 0.0
     else:
       msg= 'ERROR in ReLUGauss: %f, %f, %f, %f'%(mu, sigma, mu_out, var_out)
-      print msg
+      print(msg)
       raise Exception(msg)
   return cast(mu_out), cast(var_out)
 
@@ -359,15 +363,15 @@ class TNNRegression(TFunctionApprox):
                                  alpha=opt['loss_maf_alpha'])
     batchsize= min(opt['batchsize'], N)  #Adjust mini-batch size for too small N
     num_max_update= opt['num_max_update']
-    n_epoch= num_max_update/(N/batchsize)+1
+    n_epoch= int(num_max_update/(N/batchsize)+1)
     is_updating= True
     n_update= 0
     sum_loss= 0.0
     fp= OpenW(opt['log_filename'],'w')
-    for epoch in xrange(n_epoch):
+    for epoch in range(n_epoch):
       perm= np.random.permutation(N)
       # Train model per batch
-      for i in xrange(0, N, batchsize):
+      for i in range(0, N, batchsize):
         x_batch= opt['x_train'][perm[i:i+batchsize]]
         y_batch= opt['y_train'][perm[i:i+batchsize]]
         if opt['gpu'] >= 0:
@@ -385,7 +389,8 @@ class TNNRegression(TFunctionApprox):
           #loss_maf.Update(float(cuda.to_cpu(loss.data)))
           loss_maf.Update(sum_loss / opt['num_check_stop'])
           sum_loss= 0.0
-          if opt['verb']:  print 'Training %s:'%opt['code'], epoch, n_update, loss_maf.Mean, loss_maf.StdDev
+          if opt['verb']:
+            print('Training {}: {} {} {} {}'.format(opt['code'], epoch, n_update, loss_maf.Mean, loss_maf.StdDev))
           fp.write('%d %d %f %f\n' % (epoch, n_update, loss_maf.Mean, loss_maf.StdDev))
           if loss_maf.StdDev < opt['loss_stddev_stop']:
             is_updating= False
@@ -538,15 +543,15 @@ def TNNRegressionExample1():
   if train_model:
     x_train,y_train= GenData(100, noise=0.2)  #TEST: n samples, noise
 
-    print 'Num of samples for train:',len(y_train)
+    print('Num of samples for train: {}'.format(len(y_train)))
     # Dump data for plot:
     fp1= file('/tmp/dnn/smpl_train.dat','w')
     for x,y in zip(x_train,y_train):
       fp1.write('%s #%i# %s\n' % (' '.join(map(str,x)),len(x)+1,' '.join(map(str,y))))
     fp1.close()
 
-  x_test= np.array([[x] for x in FRange1(*Bound,num_div=100)]).astype(np.float32)
-  y_test= np.array([[TrueFunc(x[0])] for x in x_test]).astype(np.float32)
+  x_test= np.array([[x] for x in FRange1(*Bound,num_div=100)]).astype(np.float64)
+  y_test= np.array([[TrueFunc(x[0])] for x in x_test]).astype(np.float64)
 
   # Dump data for plot:
   fp1= file('/tmp/dnn/smpl_test.dat','w')
@@ -571,16 +576,16 @@ def TNNRegressionExample1():
   options['loss_stddev_stop']= 1.0e-4
   options['loss_stddev_stop_err']= 1.0e-4
   model= TNNRegression()
-  #print 'model.Options=',model.Options
+  #print('model.Options={}'.format(model.Options))
   model.Load({'options':options})
   if load_model:
     model.Load(LoadYAML('/tmp/dnn/nn_model.yaml'), '/tmp/dnn/')
   model.Init()
-  #print 'model.Options=',model.Options
+  #print('model.Options={}'.format(model.Options))
   if train_model:
     if not batch_train:
       for x,y,n in zip(x_train,y_train,range(len(x_train))):
-        print '========',n,'========'
+        print('========{}========'.format(n))
         model.Update(x,y,not_learn=((n+1)%min(10,len(x_train))!=0))
       #model.Update()
     else:

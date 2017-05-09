@@ -96,11 +96,11 @@ def LineSearch(f,x0,direc,grad=None,l0=1.0,rho=0.5,eps=0.5,n_max=5,f0=None,is_in
   if f0 is None:  f0= f(x)
   if is_in is None:  is_in= lambda x:True
   if constrain is None:  constrain= lambda x:x
-  #print 0.0, x.T, f(x)-f0, is_in(x), (f(x) - f0 >= l*t)
+  #print(0.0, x.T, f(x)-f0, is_in(x), (f(x) - f0 >= l*t))
   if not is_in(constrain(x+l_min*d)):  return x
   while n_max>0:
     x2= constrain(x+l*d)
-    #print l, x.T, d.T, x2.T, f(x2)-f0, is_in(x2), (f(x2) - f0 >= l*t)
+    #print(l, x.T, d.T, x2.T, f(x2)-f0, is_in(x2), (f(x2) - f0 >= l*t))
     if is_in(x2) and f(x2) - f0 >= l*t:  return x2
     l*= rho
     n_max-=1
@@ -400,8 +400,8 @@ class TFunctionApprox(object):
 
 #Dump function approximator (subclass of TFunctionApprox) to file for plot.
 def DumpPlot(fa, f_reduce=lambda xa:xa, f_repair=lambda xa,mi,ma,me:xa, file_prefix='/tmp/f', x_var=0.0, n_div=50, bounds=None):
-  #if len(fa.DataX)==0:  print 'DumpPlot: No data'; return
-  if not fa.IsPredictable():  print 'DumpPlot: Not predictable'; return
+  #if len(fa.DataX)==0:  print('DumpPlot: No data'); return
+  if not fa.IsPredictable():  print('DumpPlot: Not predictable'); return
   if bounds!=None:
     xamin0,xamax0= bounds
   else:
@@ -411,7 +411,7 @@ def DumpPlot(fa, f_reduce=lambda xa:xa, f_repair=lambda xa,mi,ma,me:xa, file_pre
   xamax= f_reduce(xamax0)
   xmed= [Median([x[d] for x in fa.DataX]) for d in range(fa.Dx)]
   if len(xamin)>=3 or len(xamin)!=len(xamax) or len(xamin)<=0:
-    print 'DumpPlot: Invalid f_reduce function'
+    print('DumpPlot: Invalid f_reduce function')
     return
 
   fp= open('%s_est.dat'%(file_prefix),'w')
@@ -612,12 +612,12 @@ class TLocalQuad(TFunctionApprox):
         res.Grad= dy
     else:  #i.e. not var_is_zero
       y,dy,ddy= TaylorExp2(self.MF, x, h=self.Options['h'], maxd1=self.Options['maxd1'], maxd2=self.Options['maxd2'])
-      #print 'TaylorExp2',TaylorExp2
-      #print 'ddy,x_var',ddy,x_var
-      #print '(ddy*x_var).trace()',(ddy*x_var).trace()
-      #print 'self.F(x)',self.F(x)
-      #print 'y',y
-      #print 'np.mat([y])',np.mat([y])
+      #print('TaylorExp2',TaylorExp2)
+      #print('ddy,x_var',ddy,x_var)
+      #print('(ddy*x_var).trace()',(ddy*x_var).trace())
+      #print('self.F(x)',self.F(x))
+      #print('y',y)
+      #print('np.mat([y])',np.mat([y]))
       res.Y= np.mat([y]) + (ddy*x_var).trace()
       if with_var:  res.Var= 2.0*(ddy*x_var*ddy*x_var).trace() + dy.T*x_var*dy
       if with_grad:  res.Grad= dy
