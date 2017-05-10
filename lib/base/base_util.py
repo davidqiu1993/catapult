@@ -361,10 +361,11 @@ def ToStdType(x, except_cnv=lambda y:y):
   if isinstance(x, Types.npfloat):  return float(x)
   if isinstance(x, Types.stdprim):  return x
   if isinstance(x, np.ndarray):  return x.tolist()
-  if isinstance(x, (list,tuple,set)):  return map(lambda x2:ToStdType(x2,except_cnv), x)
-  if isinstance(x, dict):  return {ToStdType(k,except_cnv):ToStdType(v,except_cnv) for k,v in x.iteritems()}
+  #if isinstance(x, (list,tuple,set)):  return map(lambda x2:ToStdType(x2,except_cnv), x)
+  if isinstance(x, (list,tuple,set)):  return type(x)([ToStdType(item,except_cnv) for item in x])
+  if isinstance(x, dict):  return {ToStdType(k,except_cnv):ToStdType(v,except_cnv) for k,v in iteritems(x)}
   try:
-    return {ToStdType(k,except_cnv):ToStdType(v,except_cnv) for k,v in x.__dict__.iteritems()}
+    return {ToStdType(k,except_cnv):ToStdType(v,except_cnv) for k,v in iteritems(x.__dict__)}
   except AttributeError:
     return except_cnv(x)
     #pass
@@ -384,7 +385,7 @@ def AddSubDict(d,key):
 #c1,c2: internal variable (DO NOT USE)
 def PrintDict(d,max_level=-1,level=0,keyonly=False,col=None,c1='',c2=''):
   if col is not None:  c1,c2= ACol.X2(col)
-  for k,v in d.iteritems():
+  for k,v in iteritems(d):
     if type(v)==dict:
       print('%s%s[%s]%s= ...' % ('  '*level, c1, str(k), c2))
       if max_level<0 or level<max_level:
