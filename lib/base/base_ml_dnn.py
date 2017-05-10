@@ -10,7 +10,10 @@ from chainer import cuda, Variable, FunctionSet, optimizers
 import chainer.functions  as F
 import six.moves.cPickle as pickle
 
-from builtins import range
+try:
+  range = xrange
+except NameError:
+  pass
 
 import pdb
 

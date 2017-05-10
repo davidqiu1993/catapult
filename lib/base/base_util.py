@@ -7,11 +7,13 @@ import os
 import sys
 import copy
 import threading
-from queue import Queue  #For thread communication
+try:
+  import Queue  #For thread communication
+except ImportError:
+  from queue import Queue
 import time
 import random
 import traceback
-from builtins import int
 from six import iteritems
 
 #Speedup YAML using CLoader/CDumper
@@ -342,7 +344,10 @@ def EstStrConvert(v_str):
   return v_str
 
 class Types:
-  stdprim= (int,float,bool,str)
+  try:
+    stdprim= (int,long,float,bool,str)
+  except NameError:
+    stdprim= (int,float,bool,str)
   npbool= (np.bool_)
   npint= (np.int_, np.intc, np.intp, np.int8, np.int16, np.int32, np.int64)
   npuint= (np.uint8, np.uint16, np.uint32, np.uint64)
