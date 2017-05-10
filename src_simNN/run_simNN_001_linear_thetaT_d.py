@@ -801,7 +801,7 @@ class TCatapultLPLinearSimNN(object):
     
     return best_pos_target, best_candidate_mtl, self._launchModule_solveForAction_Hybrid_MTL_NN_iteration
   
-  def _launchModule_generateNNPolicyTrainingSamples(self, Y_train_dynamics, model_dynamics, model_policy):
+  def _launchModule_generateNNPolicyTrainingSamples(self, Y_train_dynamics, model_dynamics, model_policy, withMSGD=False):
     """
     Generate policy network training samples from dynamics model considering 
     past experiences.
@@ -822,7 +822,10 @@ class TCatapultLPLinearSimNN(object):
     total_iterations = 0
     for i in range(len(X_train_policy)):
       desired_loc_land = X_train_policy[i]
-      optimal_pos_target, n_iter = self._launchModule_solveForAction_Hybrid_NNPolicyGD(desired_loc_land, model_dynamics, model_policy)
+      if withMSGD:
+        optimal_pos_target, n_iter = self._launchModule_solveForAction_Hybrid_MSGD_NN(desired_loc_land, model_dynamics, model_policy)
+      else:
+        optimal_pos_target, n_iter = self._launchModule_solveForAction_Hybrid_NNPolicyGD(desired_loc_land, model_dynamics, model_policy)
       total_iterations += n_iter
       Y_train_policy.append(optimal_pos_target)
       if self._CONFIG_GENERATE_NNPOLICY_SAMPLES_VERBOSE:
@@ -1046,7 +1049,7 @@ class TCatapultLPLinearSimNN(object):
       # Generate policy network training samples
       X_train_policy = []
       Y_train_policy = []
-      samples, n_iter = self._launchModule_generateNNPolicyTrainingSamples(Y_train_dynamics, model_dynamics, model_policy)
+      samples, n_iter = self._launchModule_generateNNPolicyTrainingSamples(Y_train_dynamics, model_dynamics, model_policy, withMSGD=False)
       for sample in samples:
         x, y = sample
         X_train_policy.append(x)
