@@ -125,6 +125,43 @@ class TMultilinearApproximators(object):
     
     return hp_angle
   
+  def intersect(self, approximatorIndex_1, approximatorIndex_2, bounds):
+    assert(0 <= approximatorIndex_1 and approximatorIndex_1 < self._N_APPROXIMATORS)
+    assert(0 <= approximatorIndex_2 and approximatorIndex_2 < self._N_APPROXIMATORS)
+    assert(len(bounds) == 2)
+    for i in range(len(bounds)):
+      assert(len(bounds[i]) == self._DIM_INPUT)
+
+    checkPoints = [[bounds[0][0]], [bounds[1][0]]]
+    for i in range(self._DIM_INPUT - 1):
+      newCheckPoints = []
+      for j in range(len(bounds)):
+        for k in range(len(checkPoints)):
+          p = checkPoints[k] + [bounds[j][i+1]]
+          newCheckPoints.append(p)
+      checkPoints = newCheckPoints
+
+    hasIntersection = False
+    ref_val_1 = self.predict(approximatorIndex_1, checkPoints[0])
+    ref_val_2 = self.predict(approximatorIndex_2, checkPoints[0])
+    for i in range(len(checkPoints)):
+      val_1 = self.predict(approximatorIndex_1, checkPoints[i])
+      val_2 = self.predict(approximatorIndex_2, checkPoints[i])
+      if (val_1 == val_2) or ((ref_val_1 > ref_val_2) != (val_1 > val_2)):
+        hasIntersection = True
+        break
+    
+    return hasIntersection
+
+  def similar(self, approximatorIndex_1, approximatorIndex_2, hyperplanesAngleThreshold, bounds):
+    if self.hyperplanesAngle(approximatorIndex_1, approximatorIndex_2) > hyperplanesAngleThreshold:
+      return False
+
+    if not self.intersect(approximatorIndex_1, approximatorIndex_2, bounds):
+      return False
+
+    return True
+
   def countApproximators(self):
     return self._N_APPROXIMATORS
   

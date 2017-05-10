@@ -68,7 +68,7 @@ class TCatapultLPLinearSimNN(object):
     self._CONFIG_MTL_APPROXIMATORS_N = 20
     self._CONFIG_MTL_LOCAL_SAMPLES_N = 20
     self._CONFIG_MTL_LOCAL_SAMPLES_VAR_RATIO = 0.05
-    self._CONFIG_MTL_REINIT_THRESHOLD = 6.0 / 180.0 * math.pi # in rad
+    self._CONFIG_MTL_REINIT_HYPERPLANE_ANGLE_THRESHOLD = 6.0 / 180.0 * math.pi # in rad
     
     self._CONFIG_CMAES_POPSIZE = 20
     self._CONFIG_CMAES_VERBOSE = False
@@ -841,19 +841,37 @@ class TCatapultLPLinearSimNN(object):
     """
     prefix_info = 'catapult/reinitializeMTLPolicyApproximators:'
     
-    # Reinitialize similar approximators
-    #TODO: how to find intersection subspace
-    
-    # Reinitialize inactive approximators
+    # Find the used approximator
+    usedApproximatorIndex = None
+    for approximatorIndex in range(len(mtl_policy)):
+      if mtl_policy_inactive[approximatorIndex] == 0:
+        usedApproximatorIndex = approximatorIndex
+        break
+    assert(usedApproximatorIndex is not None)
+
+    # Reinitialize similar and inactive approximators
     for approximatorIndex in range(len(mtl_policy)):
       mtl_policy_inactive[approximatorIndex] += 1
-      
-      if mtl_policy_inactive[approximatorIndex] > len(mtl_policy):
-        pos_target_sample = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
-        self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_sample)
-        mtl_policy_inactive[approximatorIndex] = int(0.5 * len(mtl_policy))
-        logger.log('{} reinitialize multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
-          prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_sample))
+
+      # Ignore just used approximator
+      if approximatorIndex != usedApproximatorIndex:
+        # Check inactivity
+        isInactive = mtl_policy_inactive[approximatorIndex] > len(mtl_policy)
+
+        # Check similarity
+        isSimilar = False
+        if not isInactive:
+          isSimilar = mtl_policy.similar(usedApproximatorIndex, approximatorIndex, 
+            self._CONFIG_MTL_REINIT_HYPERPLANE_ANGLE_THRESHOLD,
+            [[self._ESTIMATED_LOC_LAND_MIN], [self._ESTIMATED_LOC_LAND_MAX]])
+
+        # Reinitialize
+        if isInactive or isSimilar:
+          pos_target_sample = self._POS_TARGET_MIN + (self._POS_TARGET_MAX - self._POS_TARGET_MIN) * np.random.sample()
+          self._updateLocalMTLPolicyForApproximator(mtl_policy, approximatorIndex, model_dynamics, pos_target_sample)
+          mtl_policy_inactive[approximatorIndex] = int(0.5 * len(mtl_policy))
+          logger.log('{} reinitialize multilinear policy approximator with local samples (approximator: {}/{}, mean: {})'.format(
+            prefix_info, approximatorIndex+1, len(mtl_policy), pos_target_sample))
   
   def launchApproach_MB_CMAES(self):
     """
