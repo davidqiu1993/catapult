@@ -582,10 +582,10 @@ class TPlanningTree(object):
     self.FlagBwd= 0  #Backward is 0:Not computed, 1:Computed.
   def Dump(self):
     for key in ('Start','Terminal','BwdOrder','Actions','Selections','Models','FlagFwd','FlagBwd'):
-      print('%s:%s'%(key,str(self.__dict__[key])))
-    print('Tree:')
+      print '%s:%s'%(key,str(self.__dict__[key]))
+    print 'Tree:'
     for key,node in self.Tree.iteritems():
-      print('  %s:%s'%(key,node.Dump()))
+      print '  %s:%s'%(key,node.Dump())
 
   #Return a start node (TPlanningNode).
   #WARNING: After modifying the node (e.g. StartNode.XS), execute ResetFlags().
@@ -685,7 +685,7 @@ class TGraphDynUtil(object):
     defaults= self.DefaultOptions()
     for key,val in options.iteritems():
       if not key in defaults:
-        print('Invalid option: %s'%(key))
+        print 'Invalid option: %s'%(key)
         res= False
     return res
 
@@ -1546,11 +1546,8 @@ class TGraphDDPSolver3(TGraphDynUtil):
         #FIXME: ADD NOISE TO actions_in_xs
         ptree_set.append((ptree3,self.Value(ptree3)))
       count+= count_sub
-      print('DDP: {} {} {} {} {} {} {}'.format(
-        count, len(ptree_finished), len(ptree_set),
-        max(ptree_finished,key=lambda x:x[1])[1] if len(ptree_finished)>0 else None,
-        last_value, res_type,
-        {key:ToList(ptree2.StartNode.XS[key].X) for key in ptree.Actions+ptree.Selections}))
+      print 'DDP:', count, len(ptree_finished), len(ptree_set), max(ptree_finished,key=lambda x:x[1])[1] if len(ptree_finished)>0 else None, last_value, res_type,
+      CPrint(0,{key:ToList(ptree2.StartNode.XS[key].X) for key in ptree.Actions+ptree.Selections})
 
     if len(ptree_finished)>0:
       return TGraphDDPRes(max(ptree_finished,key=lambda x:x[1])[0], TGraphDDPRes.OK)
@@ -1824,11 +1821,8 @@ class TGraphDDPSolver4(TGraphDynUtil):
         #FIXME: ADD NOISE TO actions_in_xs
         ptree_set.append((ptree3,self.Value(ptree3)))
       count+= count_sub
-      print('DDP: {} {} {} {} {} {} {}'.format(
-        count, len(ptree_finished), len(ptree_set),
-        max(ptree_finished,key=lambda x:x[1])[1] if len(ptree_finished)>0 else None,
-        last_value, res_type,
-        {key:ToList(ptree2.StartNode.XS[key].X) for key in ptree.Actions+ptree.Selections}))
+      print 'DDP:', count, len(ptree_finished), len(ptree_set), max(ptree_finished,key=lambda x:x[1])[1] if len(ptree_finished)>0 else None, last_value, res_type,
+      CPrint(0,{key:ToList(ptree2.StartNode.XS[key].X) for key in ptree.Actions+ptree.Selections})
 
     for i in xrange(len(processes)):  queue_cmd.put('stop')
     for i in xrange(len(processes)):  queue_out.get()
@@ -1931,7 +1925,7 @@ class TModelManager(object):
     defaults= self.DefaultOptions()
     for key,val in options.iteritems():
       if not key in defaults:
-        print('Invalid option: %s'%(key))
+        print 'Invalid option: %s'%(key)
         res= False
     return res
 
