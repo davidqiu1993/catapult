@@ -9,10 +9,10 @@ import matplotlib.pyplot as plt
 import pdb
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/base'))
-from base_dpl4 import TGraphDynDomain, TDynNode, TCompSpaceDef, REWARD_KEY, PROB_KEY, TLocalLinear, TLocalQuad
-from base_dpl4 import TGraphEpisodeDB
-from base_dpl4 import TModelManager
-from base_dpl4 import TGraphDynPlanLearn, SSA, Vec
+from base_dpl5 import TGraphDynDomain, TDynNode, TCompSpaceDef, REWARD_KEY, PROB_KEY, TLocalLinear, TLocalQuad
+from base_dpl5 import TGraphEpisodeDB
+from base_dpl5 import TModelManager
+from base_dpl5 import TGraphDynPlanLearn, SSA, Vec
 
 
 
