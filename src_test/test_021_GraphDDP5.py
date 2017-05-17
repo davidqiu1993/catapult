@@ -33,7 +33,7 @@ class GraphDDPTest(object):
   
   def launch_test(self):
     """
-    x2 = (x1 - 2)^2
+    x2 = (x1 * a1 - 2)^2
     x3 = (x2 - 3)^2
     R  = -x3
     """
@@ -43,7 +43,7 @@ class GraphDDPTest(object):
     
     # define actual dynamics
     def actual_FdF_f1(x, with_grad=False):
-      y = [(x[0] - 2)**2]
+      y = [(x[0] * x[1] - 2)**2]
       if with_grad:
         grad = [[2 * (x[0] - 2)]]
         return y, grad
@@ -75,7 +75,8 @@ class GraphDDPTest(object):
     # define spaces
     SP = TCompSpaceDef
     domain.SpaceDefs = {
-      'x1': SP('action', 1, min=[-5.0], max=[5.0]),
+      'x1': SP('state', 1), # default: 1.0
+      'a1': SP('action', 1, min=[-5.0], max=[5.0]),
       'x2': SP('state', 1),
       'x3': SP('state', 1),
       REWARD_KEY: SP('state', 1)
@@ -83,7 +84,7 @@ class GraphDDPTest(object):
     
     # define dynamics models
     domain.Models = {
-      'f1': [['x1'], ['x2'], None],
+      'f1': [['x1', 'a1'], ['x2'], None],
       'f2': [['x2'], ['x3'], None],
       'R':  [['x3'], [REWARD_KEY], TLocalLinear(1, 1, FdF_R)],
       'P1': [[], [PROB_KEY], TLocalLinear(0, 1, lambda x:[1.0], lambda x:[0.0])]
@@ -112,7 +113,7 @@ class GraphDDPTest(object):
       'ddp_sol': { 'f_reward_ucb': 0.0 },
       'base_dir': dirpath_log
     }
-    dpl = TGraphDynPlanLearn(domain, database=db, model_manager=mm, use_policy=False)
+    dpl = TGraphDynPlanLearn(domain, database=db, model_manager=mm, use_policy=True)
     dpl.Load({ 'options': dpl_options })
     
     # initialize
@@ -124,14 +125,15 @@ class GraphDDPTest(object):
     n_init_samples = 3
     for i_sample in range(n_init_samples):
       xs = {}
-      xs['x1'] = sampleActionSSA(domain.SpaceDefs['x1'])
+      xs['x1'] = SSA([0.8])
+      xs['a1'] = sampleActionSSA(domain.SpaceDefs['a1'])
       
-      xs['x2'] = SSA(actual_FdF_f1(SSAVal(xs['x1'])))
+      xs['x2'] = SSA(actual_FdF_f1([ SSAVal(xs['x1'])[0], SSAVal(xs['a1'])[0] ]))
       dpl.MM.Update('f1', xs, xs)
       
       xs['x3'] = SSA(actual_FdF_f2(SSAVal(xs['x2'])))
       dpl.MM.Update('f2', xs, xs)
-    pdb.set_trace()
+    
     
     # run
     n_episodes = 10
@@ -139,7 +141,7 @@ class GraphDDPTest(object):
       dpl.NewEpisode()
       
       # plan
-      xs0 = {}
+      xs0 = { 'x1': SSA([1.0]) }
       res = dpl.Plan('n1', xs0)
       if res.ResCode <= 0: quit()
       xs = res.XS
@@ -147,7 +149,7 @@ class GraphDDPTest(object):
       # execute
       idb_prev = dpl.DB.AddToSeq(parent=None, name='n1', xs=xs)
       
-      xs['x2'] = SSA(actual_FdF_f1(SSAVal(xs['x1'])))
+      xs['x2'] = SSA(actual_FdF_f1([ SSAVal(xs['x1'])[0], SSAVal(xs['a1'])[0] ]))
       idb_prev = dpl.DB.AddToSeq(parent=idb_prev, name='n2', xs=xs)
       dpl.MM.Update('f1', xs, xs)
       

@@ -15,7 +15,7 @@ from base_opt2 import TDiscOptProb
 from base_dpl4 import TGraphDynDomain, TDynNode, TCompSpaceDef, REWARD_KEY, PROB_KEY, TLocalLinear, TLocalQuad
 from base_dpl4 import TGraphEpisodeDB
 from base_dpl4 import TModelManager
-from base_dpl4 import SSA, Vec
+from base_dpl4 import SSA, Vec, DimsXSSA
 from base_dpl4 import TGraphDynPlanLearn as TGraphDynPlanLearnCore
 
 
@@ -118,7 +118,7 @@ class TPolicyManager(object):
         options= copy.deepcopy(self.Options['dnn_options'])
         options['base_dir']= self.Options['base_dir']
         options['n_units']= [dim_in] + list(self.Options['dnn_hidden_units']) + [dim_out]
-        options['name']= key
+        options['name']= 'pi_' + key
         model= TNNRegression()
         model.Load(data={'options':options})
         self.Models[key][2]= model
@@ -247,17 +247,14 @@ class TGraphDynPlanLearn(object):
         
         n_samples = self._options['policy_training_samples']
         
-        randidx = self.DB.SearchIf(lambda eps: True)
+        randidx = self.DB.SearchIf(lambda eps: eps.R is not None)
         random.shuffle(randidx)
         n_samples = min(n_samples, len(randidx))
         randidx = [randidx[i] for i in range(n_samples)]
         
         for idx in randidx:
           eps = self.DB.GetEpisode(idx)
-          pdb.set_trace()
-    
-    
-    
+          print('R: {}, Seq: {}'.format(eps.R, eps.Seq))
     
     
     

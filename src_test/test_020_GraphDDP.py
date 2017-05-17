@@ -91,8 +91,8 @@ class GraphDDPTest(object):
     for episode in range(1):
       dpl.NewEpisode()
       
-      xs0 = {'x1': SSA([3.5])}
-      #xs0 = {}
+      #xs0 = {'x1': SSA([3.5])}
+      xs0 = {}
       res = dpl.Plan('n1', xs0)
       xs = res.XS
       x1 = xs['x1'].X
