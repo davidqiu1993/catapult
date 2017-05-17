@@ -3,6 +3,7 @@
 import os
 import sys
 import yaml
+import random
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -13,6 +14,16 @@ from base_dpl5 import TGraphDynDomain, TDynNode, TCompSpaceDef, REWARD_KEY, PROB
 from base_dpl5 import TGraphEpisodeDB
 from base_dpl5 import TModelManager
 from base_dpl5 import TGraphDynPlanLearn, SSA, Vec
+
+
+
+def sampleActionSSA(space_def):
+  return SSA([(space_def.Min[d] + (space_def.Max[d] - space_def.Min[d]) * np.random.sample()) for d in range(space_def.D)])
+
+
+
+def SSAVal(ssa):
+  return Vec(ssa.X).ravel()
 
 
 
@@ -27,20 +38,11 @@ class GraphDDPTest(object):
     R  = -x3
     """
     
-    dirpath_log = '/tmp/test_020_GraphDDP'
+    dirpath_log = '/tmp/test_021_GraphDDP/'
     
-    # define domain
-    domain = TGraphDynDomain()
-    SP = TCompSpaceDef
-    domain.SpaceDefs = {
-      'x1': SP('action', 1, min=[-5.0], max=[5.0]),
-      'x2': SP('state', 1),
-      'x3': SP('state', 1),
-      REWARD_KEY: SP('state', 1)
-    }
     
-    # define model
-    def FdF_f1(x, with_grad=False):
+    # define actual dynamics
+    def actual_FdF_f1(x, with_grad=False):
       y = [(x[0] - 2)**2]
       if with_grad:
         grad = [[2 * (x[0] - 2)]]
@@ -48,7 +50,7 @@ class GraphDDPTest(object):
       else:
         return y
     
-    def FdF_f2(x, with_grad=False):
+    def actual_FdF_f2(x, with_grad=False):
       y = [(x[0] - 3)**2]
       if with_grad:
         grad = [[2 * (x[0] - 3)]]
@@ -56,6 +58,8 @@ class GraphDDPTest(object):
       else:
         return y
     
+    
+    # define reward function
     def FdF_R(x, with_grad=False):
       r = [- x[0]]
       if with_grad:
@@ -64,10 +68,24 @@ class GraphDDPTest(object):
       else:
         return r
     
+    
+    # define domain
+    domain = TGraphDynDomain()
+    
+    # define spaces
+    SP = TCompSpaceDef
+    domain.SpaceDefs = {
+      'x1': SP('action', 1, min=[-5.0], max=[5.0]),
+      'x2': SP('state', 1),
+      'x3': SP('state', 1),
+      REWARD_KEY: SP('state', 1)
+    }
+    
+    # define dynamics models
     domain.Models = {
-      'f1': [['x1'], ['x2'], TLocalLinear(1, 1, FdF=FdF_f1)],
-      'f2': [['x2'], ['x3'], TLocalLinear(1, 1, FdF=FdF_f2)],
-      'R':  [['x3'], [REWARD_KEY], TLocalLinear(1, 1, FdF=FdF_R)],
+      'f1': [['x1'], ['x2'], None],
+      'f2': [['x2'], ['x3'], None],
+      'R':  [['x3'], [REWARD_KEY], TLocalLinear(1, 1, FdF_R)],
       'P1': [[], [PROB_KEY], TLocalLinear(0, 1, lambda x:[1.0], lambda x:[0.0])]
     }
     
@@ -79,28 +97,67 @@ class GraphDDPTest(object):
       'n3r': TDynNode('n2')
     }
     
+    # define model manager
+    mm_options = {
+      'base_dir': dirpath_log + 'models/'
+    }
+    mm = TModelManager(domain.SpaceDefs, domain.Models)
+    mm.Load({ 'options': mm_options })
+    
+    # define database
+    db = TGraphEpisodeDB()
+    
     # define dynamic planning and learning agent
-    dpl_options = {}
-    dpl_options['ddp_sol'] = { 'f_reward_ucb': 0.0 }
-    dpl_options['base_dir'] = dirpath_log
-    dpl = TGraphDynPlanLearn(domain)
+    dpl_options = {
+      'ddp_sol': { 'f_reward_ucb': 0.0 },
+      'base_dir': dirpath_log
+    }
+    dpl = TGraphDynPlanLearn(domain, database=db, model_manager=mm, use_policy=False)
     dpl.Load({ 'options': dpl_options })
+    
+    # initialize
+    dpl.MM.Init()
     dpl.Init()
     
+    
+    # inital samples
+    n_init_samples = 3
+    for i_sample in range(n_init_samples):
+      xs = {}
+      xs['x1'] = sampleActionSSA(domain.SpaceDefs['x1'])
+      
+      xs['x2'] = SSA(actual_FdF_f1(SSAVal(xs['x1'])))
+      dpl.MM.Update('f1', xs, xs)
+      
+      xs['x3'] = SSA(actual_FdF_f2(SSAVal(xs['x2'])))
+      dpl.MM.Update('f2', xs, xs)
+    pdb.set_trace()
+    
     # run
-    for episode in range(1):
+    n_episodes = 10
+    for episode in range(n_episodes):
       dpl.NewEpisode()
       
-      xs0 = {'x1': SSA([3.5])}
-      #xs0 = {}
+      # plan
+      xs0 = {}
       res = dpl.Plan('n1', xs0)
+      if res.ResCode <= 0: quit()
       xs = res.XS
-      x1 = xs['x1'].X
-      x2 = FdF_f1(x1)
-      x3 = FdF_f2(x2)
-      R  = FdF_R(x3)
-      print('xs={}'.format(xs))
-      print('x1={}, x2={}, x3={}, R={}'.format(x1, x2, x3, R))
+      
+      # execute
+      idb_prev = dpl.DB.AddToSeq(parent=None, name='n1', xs=xs)
+      
+      xs['x2'] = SSA(actual_FdF_f1(SSAVal(xs['x1'])))
+      idb_prev = dpl.DB.AddToSeq(parent=idb_prev, name='n2', xs=xs)
+      dpl.MM.Update('f1', xs, xs)
+      
+      xs['x3'] = SSA(actual_FdF_f2(SSAVal(xs['x2'])))
+      idb_prev = dpl.DB.AddToSeq(parent=idb_prev, name='n3', xs=xs)
+      dpl.MM.Update('f2', xs, xs)
+      
+      R = FdF_R(SSAVal(xs['x3']))
+      
+      print('actual: xs={}, R={}'.format(xs, R))
       
       dpl.EndEpisode()
 

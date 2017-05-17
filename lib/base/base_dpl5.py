@@ -2,6 +2,11 @@
 '''
 Dynamic programming and learning over graph-dynamical system.
 '''
+
+import random
+
+import pdb
+
 from base_util import *
 from base_ml import *
 from base_ml_dnn import TNNRegression
@@ -57,7 +62,8 @@ class TPolicyManager(object):
           states.append(key_in)
         elif self.SpaceDefs[key_in].Is('action'):
           actions.append(key_in)
-      self.Models[key] = [states, actions, None]
+      if len(actions) > 0 and len(states) > 0:
+        self.Models[key] = [states, actions, None]
     
     self.Learning= set()  #Memorizing learning models (keys in self.Models).
 
@@ -117,7 +123,13 @@ class TPolicyManager(object):
         model.Load(data={'options':options})
         self.Models[key][2]= model
         self.Learning.update({key})
-
+  
+  def hasKey(self, key):
+    if key in self.Models:
+      return True
+    else:
+      return False
+  
   #Return file prefix and path to save model data.
   #  key: a name of model (a key of self.Models).
   def GetFilePrefixPath(self, base_dir, key):
@@ -167,10 +179,23 @@ class TPolicyManager(object):
 
 
 class TGraphDynPlanLearn(object):
-  def __init__(self, domain, database=None, model_manager=None, policy_manager=None):
+  def __init__(self, domain, database=None, model_manager=None, use_policy=False):
     super(TGraphDynPlanLearn, self).__init__()
     
-    self._core = TGraphDynPlanLearnCore(domain, database, model_manager)
+    self._options = {
+      'policy_training_samples': 10
+    }
+    
+    self._domain = domain
+    self._database = database
+    self._model_manager = model_manager
+    
+    self._core = TGraphDynPlanLearnCore(self._domain, self._database, self._model_manager)
+    
+    self._use_policy = use_policy
+    self._policy_manager = None
+    if self._use_policy:
+      self._policy_manager = TPolicyManager(self._domain.SpaceDefs, self._domain.Models)
   
   @property
   def DB(self):
@@ -180,6 +205,9 @@ class TGraphDynPlanLearn(object):
   def MM(self):
     return self._core.MM
   
+  def PM(self):
+    return self._policy_manager
+  
   def Save(self):
     return self._core.Save()
   
@@ -187,6 +215,9 @@ class TGraphDynPlanLearn(object):
     return self._core.Load(data)
 
   def Init(self):
+    if self._use_policy:
+      self._policy_manager.Init()
+    
     return self._core.Init()
   
   def GetDDPSol(self, logfp=None):
@@ -202,6 +233,37 @@ class TGraphDynPlanLearn(object):
     return self._core.EndEpisode()
   
   def Plan(self, n_start, xs):
+    """
+    plan from n_start with initial xs
+    """
+    
+    if self._use_policy:
+      next_models = self._domain.Graph[n_start].Fd
+      next_policies = [key for key in next_models if self._policy_manager.hasKey(key)]
+      
+      for key_policy in next_policies:
+        state_keys  = self._policy_manager.Models[key_policy][0]
+        action_keys = self._policy_manager.Models[key_policy][1]
+        
+        n_samples = self._options['policy_training_samples']
+        
+        randidx = self.DB.SearchIf(lambda eps: True)
+        random.shuffle(randidx)
+        n_samples = min(n_samples, len(randidx))
+        randidx = [randidx[i] for i in range(n_samples)]
+        
+        for idx in randidx:
+          eps = self.DB.GetEpisode(idx)
+          pdb.set_trace()
+    
+    
+    
+    
+    
+    
+    
+    
+    
     return self._core.Plan(n_start, xs)
 
 
