@@ -495,8 +495,12 @@ class TGraphDynDomain(object):
     self.SpaceDefs= None   #{key:def, ...}, space definitions, key is a string (a key of XSSA), def is a TCompSpaceDef
     self.Models= None      #{key:(In,Out,F), ...}, dynamics/reward/bifurcation prob models, key is a unique string, F is a TFunctionApprox, In and Out: a list/tuple of keys of XSSA
     self.Graph= None       #{key:node,...}, graph structure, key is a unique string, node is a TDynNode
+  
   #Check the consistency.
   def Check(self):
+    '''
+    Check the consistency.
+    '''
     #TODO: implement the consistency-check code.
     #for key_F,(In,Out,F) in self.Models.iteritems():
       #if not all(key in self.SpaceDefs for key in In+Out):
@@ -554,6 +558,7 @@ class TPlanningNode(object):
     self.dFp= None     #Gradients of Fp: dict of a matrix; [key_x]= dFp/dx
     self.dJ= None      #Gradients of J: dict of a matrix; [key_x]= dJ/dx
     self.Data= None    #Data of optimizer; [key_x]= <<data>>
+  
   def Dump(self):
     def convert(x):
       if isinstance(x,np.ndarray): return x.tolist()
@@ -581,6 +586,7 @@ class TPlanningTree(object):
     self.Models= []       #[key_F,...], models used, key_F is a key of TGraphDynDomain.Models (str)
     self.FlagFwd= 0  #Forward is 0:Not computed, 1:Computed without gradients, 2:Computed with gradients.
     self.FlagBwd= 0  #Backward is 0:Not computed, 1:Computed.
+  
   def Dump(self):
     for key in ('Start','Terminal','BwdOrder','Actions','Selections','Models','FlagFwd','FlagBwd'):
       print('%s:%s'%(key,str(self.__dict__[key])))
@@ -627,8 +633,10 @@ class TPlanningTree(object):
   Loops are unrolled (max_visits indicates how many visits are allowed to each node).
   This is a breadth-first search algorithm.'''
 def GraphToPTree(graph, start, max_visits):
-  #ng_*: key of node on Graph
-  #nt_*: key of node on Tree
+  '''
+  ng_*: key of node on Graph
+  nt_*: key of node on Tree
+  '''
   ng_start= start
   tree= TPlanningTree()
   tree.Start= TPair(ng_start,0)
@@ -674,13 +682,18 @@ class TGraphDynUtil(object):
   @staticmethod
   def DefaultOptions():
     Options= {}
+    Options['verbose']= True
     Options['f_reward_ucb']= 0.0  #Scale factor of UCB (Upper Confidence Bound; to compute a value J, instead of reward, we use reward+f*std_dev).
-    #Options['use_prob_in_pred']= True  #Using a covariance of states/actions in prediction with forward models.
+    #Options['use_prob_in_pred']= True  #Using a covEvaluate value of ptree.ariance of states/actions in prediction with forward models.
     return Options
-  #@staticmethod
-  #def DefaultParams():
-    #Params= {}
-    #return Params
+  
+  '''
+  @staticmethod
+  def DefaultParams():
+    Params= {}
+    return Params
+  '''
+  
   def CheckOptions(self,options):
     res= True
     defaults= self.DefaultOptions()
@@ -747,6 +760,9 @@ class TGraphDynUtil(object):
 
   #Evaluate value of ptree.
   def Value(self, ptree, with_grad=False):
+    '''
+    Evaluate value of ptree.
+    '''
     #if ptree.FlagFwd==0:  self.ForwardTree(ptree, with_grad=with_grad)
     #FIXME:TODO:This is inefficient. Make a function to compute only StartNode.J, something like BackwardJ
     if ptree.FlagBwd==0:  self.BackwardTree(ptree)
@@ -879,6 +895,10 @@ class TGraphDynUtil(object):
 
   #Get a planning tree at a node n_start, with XSSA xs_start if given.
   def GetPTree(self, n_start, xs_start=None, max_visits=3):
+    '''
+    Get a planning tree at a node n_start, with XSSA xs_start if given.
+    '''
+    
     #Unroll the dynamical graph, obtain a planning tree TPlanningTree.
     ptree= GraphToPTree(self.d.Graph, n_start, max_visits=max_visits)
     ptree.Tree[ptree.Start].XS= xs_start
@@ -909,6 +929,10 @@ FIXME: We need to derive equations.
 
 
 class TGraphDDPRes(object):
+  """
+  Graph DDP result.
+  """
+  
   #Pseudo constants for ResCode:
   UNKNOWN       = 0
   OK            = 1  #Success
@@ -917,6 +941,7 @@ class TGraphDDPRes(object):
   NO_SOLUTION   = -2
   MODEL_MISSING = -3
   BAD_QUALITY   = -4
+  
   def __init__(self, ptree, res_code=0):
     self.PTree= ptree
     self.XS= ptree.StartNode.XS
@@ -933,7 +958,7 @@ class TGraphDDPRes(object):
 
 
 
-""" DEPRECATED: USE TGraphDDPSolver3
+""" DEPRECATED: USE TGraphDDPSolver4
 
 '''Stochastic differential dynamic programming for a graph-dynamical system.
 See the system description of TGraphDynDomain.
@@ -1333,7 +1358,7 @@ class TGraphDDPSolver2(TGraphDynUtil):
     ptree2.StartNode.Data= data
     return ptree2
 
-"""
+
 
 
 '''Stochastic differential dynamic programming for a graph-dynamical system.
@@ -1611,6 +1636,7 @@ class TGraphDDPSolver3(TGraphDynUtil):
     ptree2.StartNode.Data= data
     return ptree2
 
+"""
 
 
 '''Stochastic differential dynamic programming for a graph-dynamical system.
@@ -1645,7 +1671,6 @@ class TGraphDDPSolver4(TGraphDynUtil):
 
   @staticmethod
   def DefaultOptions():
-    #Options= {}
     Options= TGraphDynUtil.DefaultOptions()
     Options['max_visits']= 3  #Used to unroll loops in graph, indicating how many visits are allowed to each node.
 
@@ -1678,11 +1703,13 @@ class TGraphDDPSolver4(TGraphDynUtil):
     Options['ad_nz_grad']= False  #Whether normalize gradient.
 
     return Options
-  #@staticmethod
-  #def DefaultParams():
-    #Params= {}
-    #return Params
-
+  
+  '''
+  @staticmethod
+  def DefaultParams():
+    Params= {}
+    return Params
+  '''
 
   def __init__(self):
     TGraphDynUtil.__init__(self)
@@ -1824,10 +1851,11 @@ class TGraphDDPSolver4(TGraphDynUtil):
         #FIXME: ADD NOISE TO actions_in_xs
         ptree_set.append((ptree3,self.Value(ptree3)))
       count+= count_sub
-      #print 'DDP:', count, len(ptree_finished), len(ptree_set), max(ptree_finished,key=lambda x:x[1])[1] if len(ptree_finished)>0 else None, last_value, res_type,
-      sys.stdout.write('DDP: {} {} {} {} {} {} '.format(count, len(ptree_finished), len(ptree_set), max(ptree_finished,key=lambda x:x[1])[1] if len(ptree_finished)>0 else None, last_value, res_type))
-      sys.stdout.flush()
-      CPrint(0,{key:ToList(ptree2.StartNode.XS[key].X) for key in ptree.Actions+ptree.Selections})
+      if self.Options['verbose']:
+        #print 'DDP:', count, len(ptree_finished), len(ptree_set), max(ptree_finished,key=lambda x:x[1])[1] if len(ptree_finished)>0 else None, last_value, res_type,
+        sys.stdout.write('DDP: {} {} {} {} {} {} '.format(count, len(ptree_finished), len(ptree_set), max(ptree_finished,key=lambda x:x[1])[1] if len(ptree_finished)>0 else None, last_value, res_type))
+        sys.stdout.flush()
+        CPrint(0,{key:ToList(ptree2.StartNode.XS[key].X) for key in ptree.Actions+ptree.Selections})
 
     for i in xrange(len(processes)):  queue_cmd.put('stop')
     for i in xrange(len(processes)):  queue_out.get()
@@ -1921,10 +1949,14 @@ class TModelManager(object):
 
     Options['base_dir']= '/tmp/dpl/models/'  #Base directory.  Last '/' matters.
     return Options
-  #@staticmethod
-  #def DefaultParams():
-    #Params= {}
-    #return Params
+  
+  '''
+  @staticmethod
+  def DefaultParams():
+    Params= {}
+    return Params
+  '''
+  
   def CheckOptions(self,options):
     res= True
     defaults= self.DefaultOptions()
