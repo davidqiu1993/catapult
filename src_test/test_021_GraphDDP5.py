@@ -100,7 +100,10 @@ class GraphDDPTest(object):
     
     # define model manager
     mm_options = {
-      'base_dir': dirpath_log + 'models/'
+      'base_dir': dirpath_log + 'models/',
+      'dnn_options': {
+        'verbose': False
+      }
     }
     mm = TModelManager(domain.SpaceDefs, domain.Models)
     mm.Load({ 'options': mm_options })
@@ -110,7 +113,10 @@ class GraphDDPTest(object):
     
     # define dynamic planning and learning agent
     dpl_options = {
-      'ddp_sol': { 'f_reward_ucb': 0.0 },
+      'ddp_sol': {
+        'f_reward_ucb': 0.0,
+        'verbose': False
+      },
       'base_dir': dirpath_log
     }
     dpl = TGraphDynPlanLearn(domain, database=db, model_manager=mm, use_policy=True)
@@ -124,6 +130,8 @@ class GraphDDPTest(object):
     # inital samples
     n_init_samples = 3
     for i_sample in range(n_init_samples):
+      print('update models with initial samples (sample: {}/{})'.format(i_sample+1, n_init_samples))
+      
       xs = {}
       xs['x1'] = SSA([0.8])
       xs['a1'] = sampleActionSSA(domain.SpaceDefs['a1'])
@@ -134,34 +142,47 @@ class GraphDDPTest(object):
       xs['x3'] = SSA(actual_FdF_f2(SSAVal(xs['x2'])))
       dpl.MM.Update('f2', xs, xs)
     
+    print('')
+    
     
     # run
     n_episodes = 10
     for episode in range(n_episodes):
+      print('episode: {}/{}'.format(episode+1, n_episodes))
       dpl.NewEpisode()
       
       # plan
       xs0 = { 'x1': SSA([1.0]) }
+      print('GraphDDP planning begins (xs0: {})'.format(xs0))
       res = dpl.Plan('n1', xs0)
       if res.ResCode <= 0: quit()
       xs = res.XS
+      print('GraphDDP planning finished (xs: {})'.format(xs))
       
       # execute
+      print('execution and models update begin (xs: {})'.format(xs))
+      
       idb_prev = dpl.DB.AddToSeq(parent=None, name='n1', xs=xs)
+      print('execution phase (name: {}, xs: {})'.format('n1', xs))
       
       xs['x2'] = SSA(actual_FdF_f1([ SSAVal(xs['x1'])[0], SSAVal(xs['a1'])[0] ]))
       idb_prev = dpl.DB.AddToSeq(parent=idb_prev, name='n2', xs=xs)
+      print('execution phase (name: {}, xs: {})'.format('n2', xs))
       dpl.MM.Update('f1', xs, xs)
       
       xs['x3'] = SSA(actual_FdF_f2(SSAVal(xs['x2'])))
       idb_prev = dpl.DB.AddToSeq(parent=idb_prev, name='n3', xs=xs)
+      print('execution phase (name: {}, xs: {})'.format('n3', xs))
       dpl.MM.Update('f2', xs, xs)
       
       R = FdF_R(SSAVal(xs['x3']))
+      print('execution phase (name: {}, R: {})'.format('.r', R))
       
-      print('actual: xs={}, R={}'.format(xs, R))
+      print('execution and models update finished (xs: {}, R: {})'.format(xs, R))
       
       dpl.EndEpisode()
+      
+      print('')
 
 
 
