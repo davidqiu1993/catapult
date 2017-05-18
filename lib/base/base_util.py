@@ -504,9 +504,13 @@ def CPrint(col,*s):
     print('')
   else:
     c1,c2= ACol.X2(col)
-    print(c1+str(s[0]))
+    #print c1+str(s[0]),
+    sys.stdout.write('{} '.format(c1+str(s[0])))
+    sys.stdout.flush()
     for ss in s[1:]:
-      print(ss)
+      #print ss,
+      sys.stdout.write('{} '.format(ss))
+      sys.stdout.flush()
     print(c2)
 
 #Print an exception with a good format
