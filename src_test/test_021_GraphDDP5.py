@@ -13,7 +13,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../lib/base'))
 from base_dpl5 import TGraphDynDomain, TDynNode, TCompSpaceDef, REWARD_KEY, PROB_KEY, TLocalLinear, TLocalQuad
 from base_dpl5 import TGraphEpisodeDB
 from base_dpl5 import TModelManager
-from base_dpl5 import TGraphDynPlanLearn, SSA, Vec
+from base_dpl5 import TGraphDynPlanLearn, SSA, Vec, CopyXSSA
 
 
 
@@ -113,13 +113,18 @@ class GraphDDPTest(object):
     
     # define dynamic planning and learning agent
     dpl_options = {
+      'use_policy': True,
+      'policy_verbose': True,
+      'policy_manager_options': {
+        'dnn_options': { 'verbose': False }
+      },
       'ddp_sol': {
         'f_reward_ucb': 0.0,
         'verbose': False
       },
       'base_dir': dirpath_log
     }
-    dpl = TGraphDynPlanLearn(domain, database=db, model_manager=mm, use_policy=True)
+    dpl = TGraphDynPlanLearn(domain, database=db, model_manager=mm)
     dpl.Load({ 'options': dpl_options })
     
     # initialize
@@ -146,7 +151,7 @@ class GraphDDPTest(object):
     
     
     # run
-    n_episodes = 10
+    n_episodes = 20
     for episode in range(n_episodes):
       print('episode: {}/{}'.format(episode+1, n_episodes))
       dpl.NewEpisode()

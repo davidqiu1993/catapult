@@ -392,7 +392,7 @@ class TGraphEpisodeDB(object):
     xs:     XSSA.  '''
   def AddToSeq(self,parent,name,xs):
     assert(self.CurrId>=0)
-    self.Entry[-1].Seq.append(TGraphEpisode.TNode(parent=parent,name=name,xs=xs))
+    self.Entry[-1].Seq.append(TGraphEpisode.TNode(parent=parent,name=name,xs=CopyXSSA(xs)))
     return len(self.Entry[-1].Seq)-1
 
   #Return an episode specified by index.
@@ -2178,6 +2178,7 @@ class TGraphDynPlanLearn(TGraphDynUtil):
       Actions and selections of xs is modified by planned result.
     return: TGraphDDPRes. '''
   def Plan(self, n_start, xs):
+    xs = CopyXSSA(xs)
     logfp= None
     if self.Options['opt_log_name'] is not None:
       logfp= OpenW(self.Options['opt_log_name'].format(
