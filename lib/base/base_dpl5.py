@@ -16,6 +16,7 @@ from base_dpl4 import TGraphDynDomain, TDynNode, TCompSpaceDef, REWARD_KEY, PROB
 from base_dpl4 import TGraphEpisodeDB
 from base_dpl4 import TModelManager
 from base_dpl4 import SSA, Vec, DimsXSSA, CopyXSSA, SerializeXSSA, MapToXSSA
+from base_dpl4 import TGraphDynUtil
 from base_dpl4 import TGraphDynPlanLearn as TGraphDynPlanLearnCore
 
 
@@ -199,10 +200,17 @@ class TPolicyManager(object):
 
 
 
-class TGraphDynPlanLearn(object):
+class TGraphDynPlanLearn(TGraphDynUtil):
+  @staticmethod
+  def DefaultOptions():
+    options = TGraphDynPlanLearnCore.DefaultOptions()
+    options['use_policy'] = False
+    options['policy_verbose'] = True
+    options['policy_manager_options'] = {}
+    options['policy_training_samples'] = 10
+    return options
+  
   def __init__(self, domain, database=None, model_manager=None):
-    super(TGraphDynPlanLearn, self).__init__()
-    
     self._options = {
       'use_policy': False,
       'policy_verbose': True,
@@ -216,6 +224,10 @@ class TGraphDynPlanLearn(object):
     self._policy_manager = None
     
     self._core = TGraphDynPlanLearnCore(self._domain, self._database, self._model_manager)
+  
+  @property
+  def d(self):
+    return self._core.d
   
   @property
   def DB(self):
@@ -264,6 +276,33 @@ class TGraphDynPlanLearn(object):
       self._policy_manager.Init()
     
     return self._core.Init()
+  
+  def RandActions(self, actions):
+    return self._core.RandActions(actions)
+  
+  def RandSelections(self, selections):
+    return self._core.RandSelections(selections)
+  
+  def ActionNoise(self, actions, var):
+    return self._core.ActionNoise(actions, var)
+  
+  def Value(self, ptree, with_grad=False):
+    return self._core.Value(ptree, with_grad)
+  
+  def Forward(self, key, xs, with_grad=False):
+    return self._core.Forward(key, xs, with_grad)
+  
+  def ForwardP(self, key, xs, with_grad=False):
+    return self._core.ForwardP(key, xs, with_grad)
+  
+  def ForwardTree(self, ptree, with_grad=False):
+    return self._core.ForwardTree(ptree, with_grad)
+  
+  def BackwardTree(self, ptree):
+    return self._core.BackwardTree(ptree)
+  
+  def GetPTree(self, n_start, xs_start=None, max_visits=3):
+    return self._core.GetPTree(n_start, xs_start, max_visits)
   
   def GetDDPSol(self, logfp=None):
     return self._core.GetDDPSol(logfp=logfp)
