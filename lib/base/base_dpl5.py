@@ -441,6 +441,7 @@ class TGraphDynPlanLearn(TGraphDynUtil):
       shouldUsePolicy = False
     else:
       # check if any initial action is given
+      '''
       for key_policy in next_policies:
         action_keys = self._policy_manager.Models[key_policy][1]
         for action_key in action_keys:
@@ -449,6 +450,8 @@ class TGraphDynPlanLearn(TGraphDynUtil):
             break
         if shouldUsePolicy is False:
           break
+      '''
+      pass
       
       if self._options['policy_verbose']:
         print('check policy usage condition (shouldUsePolicy: {})'.format(shouldUsePolicy))
