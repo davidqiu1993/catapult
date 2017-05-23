@@ -51,7 +51,7 @@ class GraphDDPTest(object):
         return y
     
     def actual_FdF_f2(x, with_grad=False):
-      y = [(x[0] - 3)**2]
+      y = [(x[0] * x[1] - 3)**2]
       if with_grad:
         grad = [[2 * (x[0] - 3)]]
         return y, grad
@@ -78,6 +78,7 @@ class GraphDDPTest(object):
       'x1': SP('state', 1), # default: 1.0
       'a1': SP('action', 1, min=[-5.0], max=[5.0]),
       'x2': SP('state', 1),
+      'a2': SP('action', 1, min=[-5.0], max=[5.0]),
       'x3': SP('state', 1),
       REWARD_KEY: SP('state', 1)
     }
@@ -85,7 +86,7 @@ class GraphDDPTest(object):
     # define dynamics models
     domain.Models = {
       'f1': [['x1', 'a1'], ['x2'], None],
-      'f2': [['x2'], ['x3'], None],
+      'f2': [['x2', 'a2'], ['x3'], None],
       'R':  [['x3'], [REWARD_KEY], TLocalLinear(1, 1, FdF_R)],
       'P1': [[], [PROB_KEY], TLocalLinear(0, 1, lambda x:[1.0], lambda x:[0.0])]
     }
@@ -116,7 +117,7 @@ class GraphDDPTest(object):
       'use_policy': True,
       'policy_verbose': True,
       'policy_manager_options': {
-        'dnn_options': { 'verbose': False }
+        'dnn_options': { 'verbose': True }
       },
       'ddp_sol': {
         'f_reward_ucb': 0.0,
@@ -143,8 +144,9 @@ class GraphDDPTest(object):
       
       xs['x2'] = SSA(actual_FdF_f1([ SSAVal(xs['x1'])[0], SSAVal(xs['a1'])[0] ]))
       dpl.MM.Update('f1', xs, xs)
+      xs['a2'] = sampleActionSSA(domain.SpaceDefs['a2'])
       
-      xs['x3'] = SSA(actual_FdF_f2(SSAVal(xs['x2'])))
+      xs['x3'] = SSA(actual_FdF_f2([ SSAVal(xs['x2'])[0], SSAVal(xs['a2'])[0] ]))
       dpl.MM.Update('f2', xs, xs)
     
     print('')
@@ -153,37 +155,43 @@ class GraphDDPTest(object):
     # run
     n_episodes = 20
     for episode in range(n_episodes):
-      print('episode: {}/{}'.format(episode+1, n_episodes))
+      print('episode: {}/{} >>>\n'.format(episode+1, n_episodes))
       dpl.NewEpisode()
       
-      # plan
       xs0 = { 'x1': SSA([1.0]) }
-      print('GraphDDP planning begins (xs0: {})'.format(xs0))
+      xs = xs0
+      print('execution (None -> n1, xs: {})\n'.format(xs))
+      
       res = dpl.Plan('n1', xs0)
       if res.ResCode <= 0: quit()
       xs = res.XS
-      print('GraphDDP planning finished (xs: {})'.format(xs))
-      
-      # execute
-      print('execution and models update begin (xs: {})'.format(xs))
-      
+      print('GraphDDP planning (node: n1, xs0: {}, xs: {})\n'.format(xs0, xs))
       idb_prev = dpl.DB.AddToSeq(parent=None, name='n1', xs=xs)
-      print('execution phase (name: {}, xs: {})'.format('n1', xs))
       
       xs['x2'] = SSA(actual_FdF_f1([ SSAVal(xs['x1'])[0], SSAVal(xs['a1'])[0] ]))
-      idb_prev = dpl.DB.AddToSeq(parent=idb_prev, name='n2', xs=xs)
-      print('execution phase (name: {}, xs: {})'.format('n2', xs))
+      print('execution (n1 -> n2, xs: {})\n'.format(xs))
+      
+      print('update model (model: f1, xs: {})\n'.format(xs))
       dpl.MM.Update('f1', xs, xs)
       
-      xs['x3'] = SSA(actual_FdF_f2(SSAVal(xs['x2'])))
+      xs0 = xs
+      res = dpl.Plan('n2', xs0)
+      if res.ResCode <= 0: quit()
+      xs = res.XS
+      print('GraphDDP planning (node: n2, xs0: {}, xs: {})\n'.format(xs0, xs))
+      idb_prev = dpl.DB.AddToSeq(parent=idb_prev, name='n2', xs=xs)
+      
+      xs['x3'] = SSA(actual_FdF_f2([ SSAVal(xs['x2'])[0], SSAVal(xs['a2'])[0] ]))
+      print('execution (n2 -> n3, xs: {})\n'.format(xs))
       idb_prev = dpl.DB.AddToSeq(parent=idb_prev, name='n3', xs=xs)
-      print('execution phase (name: {}, xs: {})'.format('n3', xs))
+      
+      print('update model (model: f2, xs: {})\n'.format(xs))
       dpl.MM.Update('f2', xs, xs)
       
       R = FdF_R(SSAVal(xs['x3']))
-      print('execution phase (name: {}, R: {})'.format('.r', R))
+      print('generate reward (node: n3r, R: {})\n'.format(R))
       
-      print('execution and models update finished (xs: {}, R: {})'.format(xs, R))
+      print('execution and models update finished (xs: {}, R: {})\n'.format(xs, R))
       
       dpl.EndEpisode()
       

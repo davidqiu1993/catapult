@@ -393,9 +393,21 @@ class TGraphDynPlanLearn(TGraphDynUtil):
           
           # optimize with policy guided GraphDDP
           init_xs_policy = CopyXSSA(eps_node.XS)
+          
           init_xs_policy_action = (self._policy_manager.Predict(key_policy, init_xs_policy, policy_approximators='dnn'))[0]
           for key in init_xs_policy_action:
             init_xs_policy[key] = init_xs_policy_action[key]
+          
+          ptree = self.GetPTree(n_start, xs, max_visits=self.Options['ddp_sol']['max_visits'])
+          
+          rand_xs_policy_actions = self.RandActions([key for key in ptree.Actions if key not in init_xs_policy])
+          for key in rand_xs_policy_actions:
+            init_xs_policy[key] = rand_xs_policy_actions[key]
+          
+          rand_xs_policy_selections = self.RandSelections([key for key in ptree.Selections if key not in init_xs_policy])
+          for key in rand_xs_policy_selections:
+            init_xs_policy[key] = rand_xs_policy_selections[key]
+          
           res_policy = self._core.Plan(n_start, init_xs_policy)
           if self._options['policy_verbose']:
             print('optimize with policy guided GraphDDP (xs: {}, value: {})'.format(res_policy.XS, res_policy.PTree.Value()))
@@ -403,7 +415,8 @@ class TGraphDynPlanLearn(TGraphDynUtil):
           # optimize the multistart GraphDDP
           init_xs_multistart = CopyXSSA(eps_node.XS)
           for action_key in action_keys:
-            del init_xs_multistart[action_key]
+            if action_key in init_xs_multistart:
+              del init_xs_multistart[action_key]
           res_multistart = self._core.Plan(n_start, init_xs_multistart)
           if self._options['policy_verbose']:
             print('optimize with multistart GraphDDP (xs: {}, value: {})'.format(res_multistart.XS, res_multistart.PTree.Value()))
