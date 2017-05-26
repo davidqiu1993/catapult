@@ -396,7 +396,7 @@ class TGraphDynPlanLearn(TGraphDynUtil):
           
           init_xs_policy_action = (self._policy_manager.Predict(key_policy, init_xs_policy, policy_approximators='dnn'))[0]
           for key in init_xs_policy_action:
-            init_xs_policy[key] = init_xs_policy_action[key]
+            init_xs_policy[key] = SSA(init_xs_policy_action[key].X)
           
           ptree = self.GetPTree(n_start, xs, max_visits=self.Options['ddp_sol']['max_visits'])
           
@@ -472,7 +472,7 @@ class TGraphDynPlanLearn(TGraphDynUtil):
             candidate_ys = candidate_ys_list[i_candidate_ys]
             candidate_init_xs = CopyXSSA(xs)
             for key in candidate_ys:
-              candidate_init_xs[key] = candidate_ys[key]
+              candidate_init_xs[key] = SSA(candidate_ys[key].X)
             
             # optimize action candidate with GraphDDP
             res = self._core.Plan(n_start, candidate_init_xs)
